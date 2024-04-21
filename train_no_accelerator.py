@@ -7,17 +7,14 @@ import time
 import torch
 import torch.nn.functional as F
 from transformers import CLIPVisionModel
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from accelerate.utils import ProjectConfiguration
 from diffusers import AutoencoderKL, DDPMScheduler, UNet2DConditionModel
 from transformers import CLIPTextModel, CLIPTokenizer
 
 from peft import LoraConfig,inject_adapter_in_model
 
-from datasets.custom import CustomDataset, collate_fn
+from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
 from models.clip import patch_clip_text_transformer
-from models.unet import set_visual_cross_attention_adapter
+from models.unet import set_visual_cross_attention_adapter, get_visual_cross_attention_values_norm
 from models.adapters import PhotoVerseAdapter
 
 
@@ -36,16 +33,24 @@ def parse_args():
         help="Path to pretrained ip adapter model. If not specified weights are initialized randomly.",
     )
     parser.add_argument(
-        "--data_json_file",
-        type=str,
-        default="/Users/ido.nahum/dev/photoVerse/val.json",
-        help="Training datasets",
-    )
-    parser.add_argument(
         "--data_root_path",
         type=str,
-        default="/Users/ido.nahum/dev/photoVerse/FairFace/fairface-img-margin025-trainval/val",
+        default=None,
+        required=True,
         help="Training datasets root path",
+    )
+
+    parser.add_argument(
+        "--img_subfolder",
+        type=str,
+        default="images",
+        help="Subfolder relative to data_root_path containing images",
+    )
+    parser.add_argument(
+        "--mask_subfolder",
+        type=str,
+        default=None,
+        help="Subfolder relative to data_root_path containing masks",
     )
     parser.add_argument(
         "--output_dir",
@@ -194,7 +199,7 @@ def main():
 
     # set lora on textual cross attention layers add visual cross attention adapter
     lora_config = LoraConfig(
-        lora_alpha=16,
+        lora_alpha=1,
         lora_dropout=0.1,
         r=64,
         bias="none",
@@ -222,7 +227,11 @@ def main():
     optimizer = torch.optim.AdamW(params_to_opt, lr=args.learning_rate, weight_decay=args.weight_decay)
 
     # dataloader
-    train_dataset = CustomDataset(data_root=args.data_root_path, tokenizer=tokenizer, size=args.resolution)
+    if args.mask_subfolder is None:
+        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+    else:
+        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         shuffle=True,
@@ -234,6 +243,9 @@ def main():
     global_step = 0
     for epoch in range(0, args.num_train_epochs):
         begin = time.perf_counter()
+        text_adapter.train()
+        image_adapter.train()
+        unet.train()
         for step, batch in enumerate(train_dataloader):
             load_data_time = time.perf_counter() - begin
 
@@ -276,8 +288,18 @@ def main():
             # Run the UNet
             noise_pred = unet(noisy_latents, timesteps, encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)).sample
 
+            # Calculate concept text regularizer
+            concept_text_regularizer = torch.abs(concept_text_embeddings).mean()
+
+
+            #Calculate reference image regularizer
+            cross_attn_values_norm = get_visual_cross_attention_values_norm(unet)
+            cross_attn_regularizer = cross_attn_values_norm.mean()
+
             # Calculate loss
-            loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
+            diffusion_loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
+
+            loss = diffusion_loss + 0.01 * concept_text_regularizer + 0.001 * cross_attn_regularizer
 
             # Backpropagate
             loss.backward()
