@@ -1,7 +1,7 @@
 
 
 
-base_path = '/Users/ido.nahum/dev/photoVerse/FairFace/fairface-img-margin025-trainval/val'
+base_path = 'data\\fairface-img-margin025-trainval\\val'
 
 # create the following json file named val.json
 # [{"image_file": "1.png"}] for each image in the val folder
@@ -15,5 +15,5 @@ for file in files:
     file = os.path.join(base_path, file)
     data.append(file)
 
-with open('val.json', 'w') as f:
+with open(base_path.split(os.sep)[-1] + '.json', 'w') as f:
     json.dump(data, f)
