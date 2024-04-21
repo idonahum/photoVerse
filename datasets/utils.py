@@ -24,12 +24,12 @@ def create_celebahq_masks(masks_path, save_path):
                 im = im[:, :, 0]
                 im_base[im != 0] = (idx + 1)
 
-        filename_save = os.path.join(save_path, str(k) + '_mask.png')
+        filename_save = os.path.join(save_path, str(k) + '.png')
         print(filename_save)
         cv2.imwrite(filename_save, im_base)
 
 
 if __name__ == "__main__":
     folder_base = '/Users/ido.nahum/Downloads/CelebAMask-HQ/CelebAMask-HQ-mask-anno'
-    folder_save = '/Users/ido.nahum/Downloads/CelebAMask-HQ/CelebAMaskHQ-mask'
+    folder_save = '/Users/ido.nahum/dev/photoVerse/CelebaHQMask/masks'
     create_celebahq_masks(folder_base, folder_save)

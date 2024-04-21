@@ -78,7 +78,7 @@ class CustomDataset(Dataset):
         self.placeholder_token = placeholder_token
         img_dir = os.path.join(data_root, img_subfolder)
         self.image_paths = []
-        self.image_paths += [os.path.join(self.data_root, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
+        self.image_paths += [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
 
         self.image_paths = sorted(self.image_paths)
 
@@ -164,7 +164,7 @@ class CustomDatasetWithMasks(CustomDataset):
 
         self.masks_paths = []
         mask_dir = os.path.join(data_root, mask_subfolder)
-        self.masks_paths += [os.path.join(self.data_root, file_path) for file_path in os.listdir(mask_dir) if is_image(file_path)]
+        self.masks_paths += [os.path.join(mask_dir, file_path) for file_path in os.listdir(mask_dir) if is_image(file_path)]
         self.masks_paths = sorted(self.masks_paths)
 
     def _prepare_image(self, example: dict, idx: int):
