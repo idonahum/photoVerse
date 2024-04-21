@@ -1,4 +1,5 @@
 import torch.nn.functional as F
+import torch
 
 from diffusers.models.attention_processor import AttnProcessor2_0, AttnProcessor
 from models.attention_processor import PhotoVerseAttnProcessor2_0, \
@@ -33,3 +34,15 @@ def set_visual_cross_attention_adapter(unet, num_tokens=(5,)):
             )
     unet.set_attn_processor(attn_procs)
     return unet
+
+
+def get_visual_cross_attention_values_norm(unet):
+    attn_values = []
+    for name, attn_processor in unet.attn_processors.items():
+        if name.endswith("attn1.processor"):
+            continue
+        attn_values.append(attn_processor.ip_value)
+    cross_attn_values_norm = torch.stack(attn_values, dim=1)
+    bsz = cross_attn_values_norm.shape[0]
+    cross_attn_values_norm = cross_attn_values_norm.view(bsz, -1)
+    return cross_attn_values_norm

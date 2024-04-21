@@ -6,7 +6,7 @@ import os
 import PIL
 from torch.utils.data import Dataset
 import torch
-
+import numpy as np
 
 imagenet_templates_small = [
     "a photo of a {}",
@@ -66,6 +66,7 @@ class CustomDataset(Dataset):
         self,
         data_root,
         tokenizer,
+        img_subfolder='images',
         size=512,
         interpolation="bicubic",
         placeholder_token="*",
@@ -75,9 +76,9 @@ class CustomDataset(Dataset):
         self.tokenizer = tokenizer
         self.size = size
         self.placeholder_token = placeholder_token
-
+        img_dir = os.path.join(data_root, img_subfolder)
         self.image_paths = []
-        self.image_paths += [os.path.join(self.data_root, file_path) for file_path in os.listdir(self.data_root) if is_image(file_path)]
+        self.image_paths += [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
 
         self.image_paths = sorted(self.image_paths)
 
@@ -118,7 +119,8 @@ class CustomDataset(Dataset):
         example["concept_placeholder_idx"] = torch.tensor(self._find_placeholder_index(text))
         return example
 
-    def _prepare_image(self, example: dict, image_path: str):
+    def _prepare_image(self, example: dict, idx: int):
+        image_path = self.image_paths[idx]
         raw_image = Image.open(image_path)
 
         if not raw_image.mode == "RGB":
@@ -140,9 +142,53 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         example = {}
         example = self._prepare_prompt(example)
+        example = self._prepare_image(example, idx)
+        return example
 
+
+class CustomDatasetWithMasks(CustomDataset):
+    def __init__(
+        self,
+        data_root,
+        tokenizer,
+        img_subfolder='images',
+        mask_subfolder='masks',
+        size=512,
+        interpolation="bicubic",
+        placeholder_token="*",
+        template="a photo of a {}",
+    ):
+        super().__init__(data_root=data_root, tokenizer=tokenizer,img_subfolder=img_subfolder,
+                         size=size, interpolation=interpolation,
+                         placeholder_token=placeholder_token, template=template)
+
+        self.masks_paths = []
+        mask_dir = os.path.join(data_root, mask_subfolder)
+        self.masks_paths += [os.path.join(mask_dir, file_path) for file_path in os.listdir(mask_dir) if is_image(file_path)]
+        self.masks_paths = sorted(self.masks_paths)
+
+    def _prepare_image(self, example: dict, idx: int):
         image_path = self.image_paths[idx]
-        example = self._prepare_image(example, image_path)
+        mask_path = self.masks_paths[idx]
+
+        raw_image = Image.open(image_path)
+        raw_mask = Image.open(mask_path)
+
+        if not raw_image.mode == "RGB":
+            raw_image = raw_image.convert("RGB")
+
+        if not raw_mask.mode == "L":
+            raw_mask = raw_mask.convert("L")
+
+        reshaped_img = np.array(raw_image.resize(raw_mask.size))
+        mask = np.where(np.array(raw_mask))
+        clip_image = np.zeros_like(reshaped_img)
+        clip_image[mask] = reshaped_img[mask]
+
+        pixel_values_clip = self.clip_image_processor(images=clip_image, return_tensors="pt").pixel_values
+        pixel_values = self._preprocess(raw_image)
+        example["pixel_values"] = pixel_values
+        example["pixel_values_clip"] = pixel_values_clip
         return example
 
 

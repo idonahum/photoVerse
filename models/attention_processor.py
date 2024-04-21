@@ -235,6 +235,7 @@ class PhotoVerseAttnProcessor2_0(PhotoVerseAttnProcessor):
 
     def __init__(self, hidden_size, cross_attention_dim=None, num_tokens=(5,), scale=2.0, fusion_rules=(1/3, 2/3)):
         super().__init__(hidden_size, cross_attention_dim, num_tokens, scale, fusion_rules)
+        self.to_v_ip_value = None
 
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError(
@@ -393,7 +394,7 @@ class PhotoVerseAttnProcessor2_0(PhotoVerseAttnProcessor):
 
                 ip_key = ip_key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
                 ip_value = ip_value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-
+                self.to_v_ip_norm = torch.norm(ip_value, dim=-1, keepdim=True)
                 # the output of sdp = (batch, num_heads, seq_len, head_dim)
                 # TODO: add support for attn.scale when we move to Torch 2.1
                 current_ip_hidden_states = F.scaled_dot_product_attention(
