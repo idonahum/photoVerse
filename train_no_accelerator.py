@@ -205,11 +205,13 @@ def main():
 
     # set dtype and device
     weight_dtype = torch.float32
-    device = 'cpu'
+    device = 'cuda'
     unet.to(device, dtype=weight_dtype)
     vae.to(device, dtype=weight_dtype)
     text_encoder.to(device, dtype=weight_dtype)
     image_encoder.to(device, dtype=weight_dtype)
+    image_adapter.to(device, dtype=weight_dtype)
+    text_adapter.to(device, dtype=weight_dtype)
 
     # optimizer
     # Since we patch unet after freezing, all new parameters are trainable
@@ -251,7 +253,7 @@ def main():
             bsz = latents.shape[0]
 
             # Sample a random timestep for each image
-            timesteps = torch.randint(0, noise_scheduler.num_train_timesteps, (bsz,), device=latents.device).long()
+            timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device).long()
 
             # Add noise to the latents according to the noise magnitude at each timestep
             # (this is the forward diffusion process)
