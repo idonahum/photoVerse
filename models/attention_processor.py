@@ -235,7 +235,7 @@ class PhotoVerseAttnProcessor2_0(PhotoVerseAttnProcessor):
 
     def __init__(self, hidden_size, cross_attention_dim=None, num_tokens=(5,), scale=2.0, fusion_rules=(1/3, 2/3)):
         super().__init__(hidden_size, cross_attention_dim, num_tokens, scale, fusion_rules)
-        self.to_v_ip_value = None
+        self.to_v_ip_norm = None
 
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError(
