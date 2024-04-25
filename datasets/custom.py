@@ -1,6 +1,7 @@
 from packaging import version
 from PIL import Image
 from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 from transformers import CLIPImageProcessor
 import os
 import PIL
@@ -39,22 +40,12 @@ imagenet_templates_small = [
 ]
 
 
-if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
-    PIL_INTERPOLATION = {
-        "linear": PIL.Image.Resampling.BILINEAR,
-        "bilinear": PIL.Image.Resampling.BILINEAR,
-        "bicubic": PIL.Image.Resampling.BICUBIC,
-        "lanczos": PIL.Image.Resampling.LANCZOS,
-        "nearest": PIL.Image.Resampling.NEAREST,
-    }
-else:
-    PIL_INTERPOLATION = {
-        "linear": PIL.Image.LINEAR,
-        "bilinear": PIL.Image.BILINEAR,
-        "bicubic": PIL.Image.BICUBIC,
-        "lanczos": PIL.Image.LANCZOS,
-        "nearest": PIL.Image.NEAREST,
-    }
+TORCH_INTERPOLATION = {
+    "nearest": InterpolationMode.NEAREST,
+    "bilinear": InterpolationMode.BILINEAR,
+    "bicubic": InterpolationMode.BICUBIC,
+    "lanczos": InterpolationMode.LANCZOS,
+}
 
 
 def is_image(file):
@@ -85,16 +76,13 @@ class CustomDataset(Dataset):
         self.num_images = len(self.image_paths)
         self._length = self.num_images
 
-        self.interpolation = {
-            "linear": PIL_INTERPOLATION["linear"],
-            "bilinear": PIL_INTERPOLATION["bilinear"],
-            "bicubic": PIL_INTERPOLATION["bicubic"],
-            "lanczos": PIL_INTERPOLATION["lanczos"],
-        }[interpolation]
+        self.interpolation = TORCH_INTERPOLATION[interpolation]
 
         self.template = template
         self.clip_image_processor = CLIPImageProcessor()
         self.transforms = transforms.Compose([
+            transforms.Resize(self.size, interpolation=self.interpolation),
+            transforms.CenterCrop(self.size),
             transforms.ToTensor(),
             transforms.Normalize([0.5], [0.5]),
         ])
