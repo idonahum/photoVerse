@@ -8,6 +8,7 @@ import PIL
 from torch.utils.data import Dataset
 import torch
 import numpy as np
+from utils import arcface_utils
 
 imagenet_templates_small = [
     "a photo of a {}",
@@ -57,6 +58,7 @@ class CustomDataset(Dataset):
         self,
         data_root,
         tokenizer,
+        face_embedding_func=None,
         img_subfolder='images',
         size=512,
         interpolation="bicubic",
@@ -67,6 +69,7 @@ class CustomDataset(Dataset):
         self.tokenizer = tokenizer
         self.size = size
         self.placeholder_token = placeholder_token
+        self.face_embedding_func = face_embedding_func
         img_dir = os.path.join(data_root, img_subfolder)
         self.image_paths = []
         self.image_paths += [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
@@ -118,6 +121,9 @@ class CustomDataset(Dataset):
         pixel_values = self._preprocess(raw_image)
         example["pixel_values"] = pixel_values
         example["pixel_values_clip"] = pixel_values_clip
+        face_analysis = self.face_embedding_func(raw_image)
+        face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
+        example["face_embedding"] = face_analysis['embedding']
         return example
 
     def _find_placeholder_index(self, text: str):
@@ -139,12 +145,13 @@ class CustomDatasetWithMasks(CustomDataset):
         self,
         data_root,
         tokenizer,
+        face_embedding_func=None,
         img_subfolder='images',
         mask_subfolder='masks',
         size=512,
         interpolation="bicubic",
         placeholder_token="*",
-        template="a photo of a {}",
+        template="a photo of a {}"
     ):
         super().__init__(data_root=data_root, tokenizer=tokenizer,img_subfolder=img_subfolder,
                          size=size, interpolation=interpolation,
@@ -154,6 +161,7 @@ class CustomDatasetWithMasks(CustomDataset):
         mask_dir = os.path.join(data_root, mask_subfolder)
         self.masks_paths += [os.path.join(mask_dir, file_path) for file_path in os.listdir(mask_dir) if is_image(file_path)]
         self.masks_paths = sorted(self.masks_paths)
+        self.face_embedding_func = face_embedding_func
 
     def _prepare_image(self, example: dict, idx: int):
         image_path = self.image_paths[idx]
@@ -177,6 +185,9 @@ class CustomDatasetWithMasks(CustomDataset):
         pixel_values = self._preprocess(raw_image)
         example["pixel_values"] = pixel_values
         example["pixel_values_clip"] = pixel_values_clip
+        face_analysis = self.face_embedding_func(reshaped_img)
+        face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
+        example["face_embedding"] = face_analysis['embedding']
         return example
 
 
