@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 
-NUM_OF_IMAGES_IN_CELEBAHQ = 30000
+NUM_OF_IMAGES_IN_CELEBAHQ = 200
 MASKS_LABEL_LIST_CELEBAHQ = ['skin', 'nose', 'eye_g', 'l_eye', 'r_eye', 'l_brow', 'r_brow', 'l_ear', 'r_ear', 'mouth', 'u_lip', 'l_lip', 'hair', 'hat', 'ear_r', 'neck_l', 'neck', 'cloth']
 
 
@@ -30,6 +30,6 @@ def create_celebahq_masks(masks_path, save_path):
 
 
 if __name__ == "__main__":
-    folder_base = '/Users/ido.nahum/Downloads/CelebAMask-HQ/CelebAMask-HQ-mask-anno'
-    folder_save = '/Users/ido.nahum/dev/photoVerse/CelebaHQMask/masks'
+    folder_base = r'c:\Users\HAIMZIS\Downloads\CelebAMask-HQ\CelebAMask-HQ\CelebAMask-HQ-mask-anno'
+    folder_save = 'data\celeb\masks'
     create_celebahq_masks(folder_base, folder_save)

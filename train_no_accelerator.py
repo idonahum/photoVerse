@@ -17,6 +17,9 @@ from models.clip import patch_clip_text_transformer
 from models.unet import set_visual_cross_attention_adapter, get_visual_cross_attention_values_norm
 from models.adapters import PhotoVerseAdapter
 
+from insightface.app import FaceAnalysis
+from utils.arcface_utils import setup_arcface_model
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -139,6 +142,13 @@ def parse_args():
         help="Image encoder extra layers indices to use as tokens for the text encoder, should be equal to extra_num_tokens",
     )
 
+    parser.add_argument(
+        "--arcface_model_root_dir",
+        type=str,
+        default='model_repository',
+        help="Destination path for ArcFace models, which include face-detection and embedding models.",
+    )
+
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -164,6 +174,10 @@ def main():
         os.makedirs(args.output_dir, exist_ok=True)
 
     check_args(args)
+
+    setup_arcface_model(args.arcface_model_root_dir)
+    face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+    face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
 
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
@@ -230,9 +244,9 @@ def main():
 
     # dataloader
     if args.mask_subfolder is None:
-        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution, face_embedding_func=face_analysis.get)
     else:
-        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution, face_embedding_func=face_analysis.get)
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
