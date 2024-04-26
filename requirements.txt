@@ -7,3 +7,4 @@ torchvision
 wandb
 scipy
 opencv-python
+insightface
