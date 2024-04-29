@@ -9,3 +9,5 @@ scipy
 opencv-python
 insightface
 gdown
+onnxruntime
+onnxruntime-gpu
