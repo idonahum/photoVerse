@@ -1,0 +1,8 @@
+{
+  "compute_environment": "LOCAL_MACHINE",
+  "distributed_type": "NO",
+  "fp16": false,
+  "main_training_function": "main",
+  "num_machines": 1,
+  "num_processes": 1
+}
