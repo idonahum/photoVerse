@@ -46,3 +46,9 @@ def get_visual_cross_attention_values_norm(unet):
     bsz = cross_attn_values_norm.shape[0]
     cross_attn_values_norm = cross_attn_values_norm.view(bsz, -1)
     return cross_attn_values_norm
+
+
+def set_cross_attention_layers_to_train(unet):
+    for name, module in unet.named_modules():
+        if 'attn2' in name:
+            module.train()
