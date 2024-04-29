@@ -8,3 +8,4 @@ wandb
 scipy
 opencv-python
 insightface
+gdown
