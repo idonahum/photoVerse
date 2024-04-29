@@ -26,9 +26,12 @@ from models.adapters import PhotoVerseAdapter
 from models.modeling_utils import load_photoverse_model, save_progress
 from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil
+from insightface.app import FaceAnalysis
+from utils.arcface_utils import setup_arcface_model
 from PIL import Image
 
 logger = get_logger(__name__)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -189,6 +192,12 @@ def parse_args():
         default=None,
         help="The name of the repository to keep in sync with the local `output_dir`.",
     )
+    parser.add_argument(
+        "--arcface_model_root_dir",
+        type=str,
+        default=None,
+        help="Destination path for ArcFace models, which include face-detection and embedding models.",
+    )
 
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
@@ -233,12 +242,12 @@ def validation(example, tokenizer, image_encoder,
             (example["pixel_values"].shape[0], unet.in_channels, 64, 64), generator=generator,
         )
 
-    latents = latents.to(example["pixel_values_clip"])
+    latents = latents.to(device)
     scheduler.set_timesteps(100)
     latents = latents * scheduler.init_noise_sigma
 
-    placeholder_idx = example["concept_placeholder_idx"]
-    pixel_values_clip = example["pixel_values_clip"]
+    placeholder_idx = example["concept_placeholder_idx"].to(device)
+    pixel_values_clip = example["pixel_values_clip"].to(device)
 
     image_features = image_encoder(pixel_values_clip, output_hidden_states=True)
     image_embeddings = [image_features[0]] + [image_features[2][i] for i in image_encoder_layers_idx if
@@ -253,7 +262,7 @@ def validation(example, tokenizer, image_encoder,
         encoder_hidden_states_image = encoder_hidden_states_image[:, token_index:token_index + 1, :]
 
 
-    encoder_hidden_states = text_encoder({'text_input_ids': example["text_input_ids"],
+    encoder_hidden_states = text_encoder({'text_input_ids': example["text_input_ids"].to(device),
                                           "concept_text_embeddings": concept_text_embeddings,
                                           "concept_placeholder_idx": placeholder_idx.detach()})[0]
 
@@ -336,6 +345,14 @@ def main():
 
     check_args(args)
 
+    face_analysis_func = None
+    if args.arcface_model_root_dir is not None:
+        setup_arcface_model(args.arcface_model_root_dir)
+        face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+        face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
+        face_analysis_func = face_analysis.get
+
+
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
 
@@ -406,9 +423,9 @@ def main():
 
     # dataloader
     if args.mask_subfolder is None:
-        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution, face_embedding_func=face_analysis_func)
     else:
-        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution, face_embedding_func=face_analysis_func)
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -546,7 +563,7 @@ def main():
                 progress_bar.update(1)
                 global_step += 1
                 if global_step % args.save_steps == 0:
-                    save_progress(image_adapter, text_adapter, unet, accelerator, args)
+                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir)
                     gen_images = validation(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
                                device, image_encoder_layers_idx, extra_num_tokens, 7.5,
                                0)
