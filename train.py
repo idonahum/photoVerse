@@ -23,6 +23,7 @@ from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
 from models.clip import patch_clip_text_transformer
 from models.unet import set_visual_cross_attention_adapter, get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
 from models.adapters import PhotoVerseAdapter
+from models.modeling_utils import load_photoverse_model, save_progress
 from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil
 from PIL import Image
@@ -38,7 +39,7 @@ def parse_args():
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
-        "--pretrained_ip_adapter_path",
+        "--pretrained_photoverse_path",
         type=str,
         default=None,
         help="Path to pretrained ip adapter model. If not specified weights are initialized randomly.",
@@ -285,21 +286,6 @@ def validation(example, tokenizer, image_encoder,
     return ret_pil_images
 
 
-def save_progress(image_adapter, text_adapter, unet, accelerator, args, step=None):
-    logger.info("Saving embeddings")
-
-    state_dict_image_adapter = accelerator.unwrap_model(image_adapter).state_dict()
-    state_dict_text_adapter = accelerator.unwrap_model(text_adapter).state_dict()
-    state_dict_unet = accelerator.unwrap_model(unet).state_dict()
-    states_dict_adapters = {"image_adapter": state_dict_image_adapter, "text_adapter": state_dict_text_adapter}
-    if step is not None:
-        accelerator.save(states_dict_adapters, os.path.join(args.output_dir, f"adapters_{str(step).zfill(6)}.pt"))
-        accelerator.save(state_dict_unet, os.path.join(args.output_dir, f"unet_{str(step).zfill(6)}.pt"))
-    else:
-        accelerator.save(states_dict_adapters, os.path.join(args.output_dir, "adapters.pt"))
-        accelerator.save(state_dict_unet, os.path.join(args.output_dir, "unet.pt"))
-
-
 def check_args(args):
     if args.extra_num_tokens < 0:
         raise ValueError("extra_num_tokens should be greater than or equal to 0")
@@ -393,15 +379,8 @@ def main():
     unet = inject_adapter_in_model(lora_config, unet)
     unet = set_visual_cross_attention_adapter(unet, num_tokens=(extra_num_tokens + 1,))
 
-    # set dtype and device
-    weight_dtype = torch.float32
-    device = accelerator.device
-    unet.to(device, dtype=weight_dtype)
-    vae.to(device, dtype=weight_dtype)
-    text_encoder.to(device, dtype=weight_dtype)
-    image_encoder.to(device, dtype=weight_dtype)
-    image_adapter.to(device, dtype=weight_dtype)
-    text_adapter.to(device, dtype=weight_dtype)
+    if args.pretrained_photoverse_path is not None:
+        image_adapter, text_adapter, unet = load_photoverse_model(args.pretrained_photoverse_path, image_adapter, text_adapter, unet)
 
     # optimizer
     # Since we patch unet after freezing, all new parameters are trainable
@@ -439,15 +418,36 @@ def main():
         num_workers=args.dataloader_num_workers,
     )
 
-    vae.eval()
-    unet.eval()
-    image_encoder.eval()
-
     override_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         override_max_train_steps = True
+
+    # train
+    unet, image_adapter, text_adapter, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        unet,
+        image_adapter,
+        text_adapter,
+        optimizer,
+        train_dataloader,
+        lr_scheduler,
+        device_placement=[True, True, True, True, False, False])
+
+    # set dtype and device
+    weight_dtype = torch.float32
+    device = accelerator.device
+    unet.to(device, dtype=weight_dtype)
+    vae.to(device, dtype=weight_dtype)
+    text_encoder.to(device, dtype=weight_dtype)
+    image_encoder.to(device, dtype=weight_dtype)
+    image_adapter.to(device, dtype=weight_dtype)
+    text_adapter.to(device, dtype=weight_dtype)
+
+    # set to eval
+    vae.eval()
+    unet.eval()
+    image_encoder.eval()
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -455,12 +455,6 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-
-    # train
-    unet, image_adapter, text_adapter, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, image_adapter, text_adapter, train_dataloader, lr_scheduler
-    )
-
     if accelerator.is_main_process:
         accelerator.init_trackers("photoVerse", config=vars(args))
 
