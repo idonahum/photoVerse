@@ -1,8 +1,9 @@
 import argparse
 import os
 from datasets.utils import download_celebhq_masks, create_celebahq_masks, split_celebhqmasks_train_test
+# from utils.arcface_utils import download_face_detection_models
 
-parser = argparse.ArgumentParser(description="Downloading, extracting and splitting CelebHQ dataset.")
+parser = argparse.ArgumentParser(description="Downloading, extracting and splitting CelebHQ dataset, in addition, downloading face detection models")
 parser.add_argument(
     "--save_path",
     type=str,
@@ -77,6 +78,20 @@ parser.add_argument(
     help="Force split the dataset even if it already exists.",
 )
 
+# parser.add_argument(
+#     "--gdrive_file_id_face_detection",
+#     type=str,
+#     default='1HJ4MlkOOqUQwxaRCPaCVh22Wpdi_Uhwj',
+#     help="Google Drive file ID for face detection models.",
+# )
+
+# parser.add_argument(
+#     "--face_detection_models_folder",
+#     type=str,
+#     default='./model_repository',
+#     help="The folder to download the face detection models.",
+# )
+
 if __name__ == "__main__":
     args = parser.parse_args()
 
@@ -94,5 +109,12 @@ if __name__ == "__main__":
     # split the images and masks into train and test folders
     src_img_folder = os.path.join(dataset_src_folder, args.dataset_src_img_folder)
     train_folder, test_folder = split_celebhqmasks_train_test(src_img_folder, src_masks_folder, args.save_path, args.train_ratio, args.force_split)
+
+    # download the face detection models - it must be in models directory
+    # arcface_models_folder = os.path.join(args.face_detection_models_folder, 'models')
+    # os.makedirs(arcface_models_folder, exist_ok=True)
+    # download_face_detection_models(arcface_models_folder, args.gdrive_file_id_face_detection)
+
     print(f'Train folder: {train_folder}')
     print(f'Test folder: {test_folder}')
+    # print(f'ArcFace models folder: {args.face_detection_models_folder}')
