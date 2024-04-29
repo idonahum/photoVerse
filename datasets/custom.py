@@ -1,9 +1,8 @@
-from packaging import version
 from PIL import Image
 from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 from transformers import CLIPImageProcessor
 import os
-import PIL
 from torch.utils.data import Dataset
 import torch
 import numpy as np
@@ -40,22 +39,12 @@ imagenet_templates_small = [
 ]
 
 
-if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
-    PIL_INTERPOLATION = {
-        "linear": PIL.Image.Resampling.BILINEAR,
-        "bilinear": PIL.Image.Resampling.BILINEAR,
-        "bicubic": PIL.Image.Resampling.BICUBIC,
-        "lanczos": PIL.Image.Resampling.LANCZOS,
-        "nearest": PIL.Image.Resampling.NEAREST,
-    }
-else:
-    PIL_INTERPOLATION = {
-        "linear": PIL.Image.LINEAR,
-        "bilinear": PIL.Image.BILINEAR,
-        "bicubic": PIL.Image.BICUBIC,
-        "lanczos": PIL.Image.LANCZOS,
-        "nearest": PIL.Image.NEAREST,
-    }
+TORCH_INTERPOLATION = {
+    "nearest": InterpolationMode.NEAREST,
+    "bilinear": InterpolationMode.BILINEAR,
+    "bicubic": InterpolationMode.BICUBIC,
+    "lanczos": InterpolationMode.LANCZOS,
+}
 
 
 def is_image(file):
@@ -82,22 +71,18 @@ class CustomDataset(Dataset):
         img_dir = os.path.join(data_root, img_subfolder)
         self.image_paths = []
         self.image_paths += [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
-
-        self.image_paths = sorted(self.image_paths)
+        self.image_paths = sorted(self.image_paths, key=lambda x: int(os.path.basename(x).split('.')[0]))
 
         self.num_images = len(self.image_paths)
         self._length = self.num_images
 
-        self.interpolation = {
-            "linear": PIL_INTERPOLATION["linear"],
-            "bilinear": PIL_INTERPOLATION["bilinear"],
-            "bicubic": PIL_INTERPOLATION["bicubic"],
-            "lanczos": PIL_INTERPOLATION["lanczos"],
-        }[interpolation]
+        self.interpolation = TORCH_INTERPOLATION[interpolation]
 
         self.template = template
         self.clip_image_processor = CLIPImageProcessor()
         self.transforms = transforms.Compose([
+            transforms.Resize(self.size, interpolation=self.interpolation),
+            transforms.CenterCrop(self.size),
             transforms.ToTensor(),
             transforms.Normalize([0.5], [0.5]),
         ])
@@ -133,9 +118,10 @@ class CustomDataset(Dataset):
         pixel_values = self._preprocess(raw_image)
         example["pixel_values"] = pixel_values
         example["pixel_values_clip"] = pixel_values_clip
-        face_analysis = self.face_embedding_func(raw_image)
-        face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
-        example["face_embedding"] = face_analysis['embedding']
+        if self.face_embedding_func:
+            face_analysis = self.face_embedding_func(raw_image)
+            face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
+            example["face_embedding"] = face_analysis['embedding']
         return example
 
     def _find_placeholder_index(self, text: str):
@@ -172,7 +158,7 @@ class CustomDatasetWithMasks(CustomDataset):
         self.masks_paths = []
         mask_dir = os.path.join(data_root, mask_subfolder)
         self.masks_paths += [os.path.join(mask_dir, file_path) for file_path in os.listdir(mask_dir) if is_image(file_path)]
-        self.masks_paths = sorted(self.masks_paths)
+        self.masks_paths = sorted(self.masks_paths, key=lambda x: int(os.path.basename(x).split('.')[0]))
         self.face_embedding_func = face_embedding_func
 
     def _prepare_image(self, example: dict, idx: int):
@@ -197,9 +183,10 @@ class CustomDatasetWithMasks(CustomDataset):
         pixel_values = self._preprocess(raw_image)
         example["pixel_values"] = pixel_values
         example["pixel_values_clip"] = pixel_values_clip
-        face_analysis = self.face_embedding_func(reshaped_img)
-        face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
-        example["face_embedding"] = face_analysis['embedding']
+        if self.face_embedding_func:
+            face_analysis = self.face_embedding_func(reshaped_img)
+            face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
+            example["face_embedding"] = face_analysis['embedding']
         return example
 
 

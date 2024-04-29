@@ -9,13 +9,13 @@ def setup_arcface_model(root_dir):
     """
     Sets up the ArcFace model and face detection models.
     If the target directory doesn't exist, it creates it and downloads necessary files.
-    
+
     :param root_dir: Root directory for ArcFace model setup.
     """
     # Path for the ArcFace model
     model_path = os.path.join(root_dir, 'models')
     arcface_model_path = os.path.join(model_path, 'antelopev2')
-    
+
     # Check if the target directory exists
     if not os.path.exists(model_path):
         # Create the directory
@@ -23,10 +23,10 @@ def setup_arcface_model(root_dir):
 
         # Download Face Detection Model
         download_face_detection_models(model_path)
-        
+
         # Load Insightface Pipe (ArcFace)
         hf_hub_download(repo_id="FoivosPar/Arc2Face", filename="arcface.onnx", local_dir=arcface_model_path)
-    
+
     print(f"ArcFace model setup complete in {arcface_model_path}")
 
 
@@ -83,6 +83,7 @@ def get_largest_bbox_face_analysis(face_analyses):
 
     return largest_face_analysis
 
+
 def cosine_similarity_between_images(image1, image2, face_analysis_func):
     """
     Given two images, return the cosine similarity of their embeddings.
@@ -95,8 +96,8 @@ def cosine_similarity_between_images(image1, image2, face_analysis_func):
     Returns:
     - cosine_similarity_value: The cosine similarity between the embeddings of the two images.
     """
-    face_analysis1 = face_analysis_func.get(image1) 
-    face_analysis2 = face_analysis_func.get(image2) 
+    face_analysis1 = face_analysis_func.get(image1)
+    face_analysis2 = face_analysis_func.get(image2)
 
     embedding1 = get_largest_bbox_face_analysis(face_analysis1)['embedding']
     embedding2 = get_largest_bbox_face_analysis(face_analysis2)['embedding']
@@ -107,11 +108,11 @@ def cosine_similarity_between_images(image1, image2, face_analysis_func):
     return cosine_similarity_value
 
 
-def download_face_detection_models(dest_dir, file_id="18wEUfMNohBJ4K3Ly5wpTejPfDzp-8fI8"):
+def download_face_detection_models(dest_dir, file_id="1HJ4MlkOOqUQwxaRCPaCVh22Wpdi_Uhwj"):
     """
     Downloads a zip file from Google Drive using the file ID,
     and extracts it to the destination directory if the directory doesn't exist.
-    
+
     :param file_id: Google Drive file ID
     :param dest_dir: Destination directory for extraction
     """
@@ -132,4 +133,6 @@ def download_face_detection_models(dest_dir, file_id="18wEUfMNohBJ4K3Ly5wpTejPfD
     with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
         zip_ref.extractall(dest_dir)  # Extract all contents
 
+    # Remove the zip file after extraction
+    os.remove(zip_file_path)
     print(f"File downloaded and extracted to {dest_dir}")

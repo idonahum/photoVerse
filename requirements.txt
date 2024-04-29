@@ -2,3 +2,12 @@ diffusers
 transformers
 peft
 accelerate
+torch
+torchvision
+wandb
+scipy
+opencv-python
+insightface
+gdown
+onnxruntime
+onnxruntime-gpu
