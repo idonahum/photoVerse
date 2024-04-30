@@ -563,7 +563,7 @@ def main():
                 progress_bar.update(1)
                 global_step += 1
                 if global_step % args.save_steps == 0:
-                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir)
+                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step)
                     gen_images = validation(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
                                device, image_encoder_layers_idx, extra_num_tokens, 7.5,
                                0)
