@@ -229,17 +229,15 @@ def validation(example, tokenizer, image_encoder,
         max_length=tokenizer.model_max_length,
         return_tensors="pt",
     )
-
-    uncond_embeddings = text_encoder({'text_input_ids':uncond_input.input_ids.to(device)})[0]
-
+    batch_size = example["pixel_values"].shape[0]
     if seed is None:
         latents = torch.randn(
-            (example["pixel_values"].shape[0], unet.in_channels, 64, 64)
+            (batch_size, unet.config.in_channels, 64, 64)
         )
     else:
         generator = torch.manual_seed(seed)
         latents = torch.randn(
-            (example["pixel_values"].shape[0], unet.in_channels, 64, 64), generator=generator,
+            (batch_size, unet.config.in_channels, 64, 64), generator=generator,
         )
 
     latents = latents.to(device)
@@ -249,6 +247,7 @@ def validation(example, tokenizer, image_encoder,
     placeholder_idx = example["concept_placeholder_idx"].to(device)
     pixel_values_clip = example["pixel_values_clip"].to(device)
 
+    # get conditional image embeddings and text embeddings
     image_features = image_encoder(pixel_values_clip, output_hidden_states=True)
     image_embeddings = [image_features[0]] + [image_features[2][i] for i in image_encoder_layers_idx if
                                               i < len(image_features[2])]
@@ -256,12 +255,21 @@ def validation(example, tokenizer, image_encoder,
     image_embeddings = [emb.detach() for emb in image_embeddings]
     concept_text_embeddings = text_adapter(image_embeddings)
     encoder_hidden_states_image = image_adapter(image_embeddings)
+
+    # get unconditional image embeddings
+    uncond_image_features = image_encoder(torch.zeros_like(example["pixel_values_clip"]).to(device), output_hidden_states=True)
+    uncond_image_emmbedings = [uncond_image_features[0]] + [uncond_image_features[2][i] for i in image_encoder_layers_idx if i < len(uncond_image_features[2])]
+    assert len(uncond_image_emmbedings) == extra_num_tokens + 1, "Entered indices are out of range for image_encoder layers."
+    uncond_image_emmbedings = [emb.detach() for emb in uncond_image_emmbedings]
+    uncond_encoder_hidden_states_image = image_adapter(uncond_image_emmbedings)
+
     if token_index != 'full':
         token_index = int(token_index)
         concept_text_embeddings = concept_text_embeddings[:, token_index:token_index + 1, :]
         encoder_hidden_states_image = encoder_hidden_states_image[:, token_index:token_index + 1, :]
+        uncond_encoder_hidden_states_image = uncond_encoder_hidden_states_image[:, token_index:token_index + 1, :]
 
-
+    uncond_embeddings = text_encoder({'text_input_ids': uncond_input.input_ids.to(device)})[0]
     encoder_hidden_states = text_encoder({'text_input_ids': example["text_input_ids"].to(device),
                                           "concept_text_embeddings": concept_text_embeddings,
                                           "concept_placeholder_idx": placeholder_idx.detach()})[0]
@@ -279,7 +287,7 @@ def validation(example, tokenizer, image_encoder,
         noise_pred_uncond = unet(
             latent_model_input,
             t,
-            encoder_hidden_states=uncond_embeddings
+            encoder_hidden_states=(uncond_embeddings, uncond_encoder_hidden_states_image)
         ).sample
 
         noise_pred = noise_pred_uncond + guidance_scale * (

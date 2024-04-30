@@ -407,13 +407,17 @@ class PhotoVerseAttnProcessor2_0(PhotoVerseAttnProcessor):
                 current_ip_hidden_states = current_ip_hidden_states.to(query.dtype)
 
                 # sample a value from uniform distribution, use pytorch
-                seed = torch.rand(1).item()
-                if seed < self.fusion_rule1:
-                    hidden_states = scale * hidden_states
-                elif seed > self.fusion_rule2:
-                    hidden_states = scale * current_ip_hidden_states
-                else:
+                # check if are in no_grad mode
+                if not torch.is_grad_enabled():
                     hidden_states = hidden_states + current_ip_hidden_states
+                else:
+                    seed = torch.rand(1).item()
+                    if seed < self.fusion_rule1:
+                        hidden_states = scale * hidden_states
+                    elif seed > self.fusion_rule2:
+                        hidden_states = scale * current_ip_hidden_states
+                    else:
+                        hidden_states = hidden_states + current_ip_hidden_states
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states)
