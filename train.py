@@ -421,6 +421,7 @@ def main():
         num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
+    print('reached dataloader...')
     # dataloader
     if args.mask_subfolder is None:
         train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution, face_embedding_func=face_analysis_func)
@@ -488,6 +489,7 @@ def main():
     progress_bar.set_description("Steps")
     global_step = 0
 
+    print('reached training loop...')
     for epoch in range(0, args.num_train_epochs):
         text_adapter.train()
         image_adapter.train()
