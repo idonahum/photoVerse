@@ -4,7 +4,7 @@ from torchvision import transforms
 
 def denormalize(image):
     """
-    Denormalize the image from [-1, 1] to [0, 255]
+    Denormalize the image from [-1, 1] to [0, 1]
     """
     image = (image / 2 + 0.5).clamp(0, 1)
     return image

@@ -3,6 +3,8 @@ import gdown
 import zipfile
 import os
 from huggingface_hub import hf_hub_download
+from PIL import Image
+import numpy as np
 
 
 def setup_arcface_model(root_dir):
@@ -96,6 +98,12 @@ def cosine_similarity_between_images(image1, image2, face_analysis_func):
     Returns:
     - cosine_similarity_value: The cosine similarity between the embeddings of the two images.
     """
+    # Check if the images are PIL Images and convert to numpy arrays if so
+    if isinstance(image1, Image.Image):
+        image1 = np.array(image1)
+    if isinstance(image2, Image.Image):
+        image2 = np.array(image2)
+
     face_analysis1 = face_analysis_func.get(image1)
     face_analysis2 = face_analysis_func.get(image2)
 

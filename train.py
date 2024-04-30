@@ -124,11 +124,19 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--save_steps",
+        "--save_checkpoints_steps",
         type=int,
         default=2000,
         help=(
             "Save a checkpoint of the training state every X updates"
+        ),
+    )
+    parser.add_argument(
+        "--save_generated_outputs_steps",
+        type=int,
+        default=2000,
+        help=(
+            "Save generated images every X updates"
         ),
     )
     parser.add_argument(
@@ -208,7 +216,7 @@ def parse_args():
 
     return args
 
-
+# TODO: valid guidance_scale in range [7.5, 20.0]
 @torch.no_grad()
 def validation(example, tokenizer, image_encoder,
                text_encoder, unet, text_adapter,
@@ -216,6 +224,7 @@ def validation(example, tokenizer, image_encoder,
                image_encoder_layers_idx, extra_num_tokens,
                guidance_scale, token_index='full', seed=None):
     print("running validation")
+    # TODO: Use the original one, with same configuration (for validation).
     scheduler = LMSDiscreteScheduler(
         beta_start=0.00085,
         beta_end=0.012,
@@ -266,6 +275,7 @@ def validation(example, tokenizer, image_encoder,
                                           "concept_text_embeddings": concept_text_embeddings,
                                           "concept_placeholder_idx": placeholder_idx.detach()})[0]
 
+    # TODO: reversed order ? 
     for t in tqdm(scheduler.timesteps):
         latent_model_input = scheduler.scale_model_input(latents, t)
         noise_pred_text = unet(
@@ -274,6 +284,7 @@ def validation(example, tokenizer, image_encoder,
             encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)
         ).sample
 
+        # TODO: why twice ?
         latent_model_input = scheduler.scale_model_input(latents, t)
 
         noise_pred_uncond = unet(
@@ -471,6 +482,7 @@ def main():
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if override_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
     if accelerator.is_main_process:
@@ -564,8 +576,7 @@ def main():
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 global_step += 1
-                if global_step % args.save_steps == 0:
-                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step)
+                if global_step % args.save_generated_outputs_steps == 0:
                     gen_images = validation(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
                                device, image_encoder_layers_idx, extra_num_tokens, 7.5,
                                0)
@@ -580,8 +591,12 @@ def main():
                     img_grid.save(img_grid_file)
                     if args.report_to == "wandb":
                         images = wandb.Image(img_grid_file, caption="Generated images vs input images")
-                    logs = {"Generated images vs input images": images}
+                    logs = {"Generated images vs input images": images,
+                            "arcface_similarity": np.mean([face_analysis_func(img_input, img_gen) for (img_input, img_gen) in zip(input_images, gen_images)])}
                     accelerator.log(logs, step=global_step)
+                
+                if global_step % args.save_checkpoints_steps == 0:
+                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step)
 
             logs = {"loss_mle": diffusion_loss.detach().item(),
                     "loss_reg_concept_text": concept_text_loss.detach().item(),
