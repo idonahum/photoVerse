@@ -9,22 +9,16 @@ import torch
 import torch.nn.functional as F
 from accelerate.logging import get_logger
 from tqdm import tqdm
-from transformers import CLIPVisionModel
-from diffusers import AutoencoderKL, DDPMScheduler, UNet2DConditionModel, LMSDiscreteScheduler
 from diffusers.optimization import get_scheduler
-from transformers import CLIPTextModel, CLIPTokenizer
 from accelerate import Accelerator
 from accelerate.utils import set_seed, ProjectConfiguration
-from peft import LoraConfig,inject_adapter_in_model
 from huggingface_hub import Repository
 import wandb
 
 from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
 from models.infer import run_inference
-from models.clip import patch_clip_text_transformer
-from models.unet import set_visual_cross_attention_adapter, get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
-from models.adapters import PhotoVerseAdapter
-from models.modeling_utils import load_models, load_photoverse_model, save_progress
+from models.unet import get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
+from models.modeling_utils import load_models, save_progress
 from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil
 from insightface.app import FaceAnalysis
