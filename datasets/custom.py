@@ -68,13 +68,15 @@ class CustomDataset(Dataset):
         self.size = size
         self.placeholder_token = placeholder_token
         self.face_embedding_func = face_embedding_func
-        img_dir = os.path.join(data_root, img_subfolder)
-        self.image_paths = []
-        self.image_paths += [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
-        self.image_paths = sorted(self.image_paths, key=lambda x: int(os.path.basename(x).split('.')[0]))
 
-        self.num_images = len(self.image_paths)
-        self._length = self.num_images
+        if data_root:
+            img_dir = os.path.join(data_root, img_subfolder)
+            self.image_paths = []
+            self.image_paths += [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
+            self.image_paths = sorted(self.image_paths, key=lambda x: int(os.path.basename(x).split('.')[0]))
+
+            self.num_images = len(self.image_paths)
+            self._length = self.num_images
 
         self.interpolation = TORCH_INTERPOLATION[interpolation]
 
