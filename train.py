@@ -20,10 +20,11 @@ from huggingface_hub import Repository
 import wandb
 
 from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
+from models.infer import run_inference
 from models.clip import patch_clip_text_transformer
 from models.unet import set_visual_cross_attention_adapter, get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
 from models.adapters import PhotoVerseAdapter
-from models.modeling_utils import load_photoverse_model, save_progress
+from models.modeling_utils import load_models, load_photoverse_model, save_progress
 from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil
 from insightface.app import FaceAnalysis
@@ -184,6 +185,21 @@ def parse_args():
             ' "constant", "constant_with_warmup"]'
         ),
     )
+
+    parser.add_argument(
+        '--denoise_timesteps',
+        type=int,
+        default=10, 
+        help='Number of timesteps for inference'
+    )
+
+    parser.add_argument(
+        '--guidance_scale',
+        type=float,
+        default=1.0,
+        help='Guidance scale for inference'
+    )
+
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
     parser.add_argument(
@@ -207,100 +223,6 @@ def parse_args():
         args.local_rank = env_local_rank
 
     return args
-
-
-@torch.no_grad()
-def validation(example, tokenizer, image_encoder,
-               text_encoder, unet, text_adapter,
-               image_adapter, vae, device,
-               image_encoder_layers_idx, extra_num_tokens,
-               guidance_scale, token_index='full', seed=None):
-    print("running validation")
-    scheduler = LMSDiscreteScheduler(
-        beta_start=0.00085,
-        beta_end=0.012,
-        beta_schedule="scaled_linear",
-        num_train_timesteps=1000,
-    )
-
-    uncond_input = tokenizer(
-        [''] * example["pixel_values"].shape[0],
-        padding="max_length",
-        max_length=tokenizer.model_max_length,
-        return_tensors="pt",
-    )
-    batch_size = example["pixel_values"].shape[0]
-    if seed is None:
-        latents = torch.randn(
-            (batch_size, unet.config.in_channels, 64, 64)
-        )
-    else:
-        generator = torch.manual_seed(seed)
-        latents = torch.randn(
-            (batch_size, unet.config.in_channels, 64, 64), generator=generator,
-        )
-
-    latents = latents.to(device)
-    scheduler.set_timesteps(100)
-    latents = latents * scheduler.init_noise_sigma
-
-    placeholder_idx = example["concept_placeholder_idx"].to(device)
-    pixel_values_clip = example["pixel_values_clip"].to(device)
-
-    # get conditional image embeddings and text embeddings
-    image_features = image_encoder(pixel_values_clip, output_hidden_states=True)
-    image_embeddings = [image_features[0]] + [image_features[2][i] for i in image_encoder_layers_idx if
-                                              i < len(image_features[2])]
-    assert len(image_embeddings) == extra_num_tokens + 1, "Entered indices are out of range for image_encoder layers."
-    image_embeddings = [emb.detach() for emb in image_embeddings]
-    concept_text_embeddings = text_adapter(image_embeddings)
-    encoder_hidden_states_image = image_adapter(image_embeddings)
-
-    # get unconditional image embeddings
-    uncond_image_features = image_encoder(torch.zeros_like(example["pixel_values_clip"]).to(device), output_hidden_states=True)
-    uncond_image_emmbedings = [uncond_image_features[0]] + [uncond_image_features[2][i] for i in image_encoder_layers_idx if i < len(uncond_image_features[2])]
-    assert len(uncond_image_emmbedings) == extra_num_tokens + 1, "Entered indices are out of range for image_encoder layers."
-    uncond_image_emmbedings = [emb.detach() for emb in uncond_image_emmbedings]
-    uncond_encoder_hidden_states_image = image_adapter(uncond_image_emmbedings)
-
-    if token_index != 'full':
-        token_index = int(token_index)
-        concept_text_embeddings = concept_text_embeddings[:, token_index:token_index + 1, :]
-        encoder_hidden_states_image = encoder_hidden_states_image[:, token_index:token_index + 1, :]
-        uncond_encoder_hidden_states_image = uncond_encoder_hidden_states_image[:, token_index:token_index + 1, :]
-
-    uncond_embeddings = text_encoder({'text_input_ids': uncond_input.input_ids.to(device)})[0]
-    encoder_hidden_states = text_encoder({'text_input_ids': example["text_input_ids"].to(device),
-                                          "concept_text_embeddings": concept_text_embeddings,
-                                          "concept_placeholder_idx": placeholder_idx.detach()})[0]
-
-    for t in tqdm(scheduler.timesteps):
-        latent_model_input = scheduler.scale_model_input(latents, t)
-        noise_pred_text = unet(
-            latent_model_input,
-            t,
-            encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)
-        ).sample
-
-        latent_model_input = scheduler.scale_model_input(latents, t)
-
-        noise_pred_uncond = unet(
-            latent_model_input,
-            t,
-            encoder_hidden_states=(uncond_embeddings, uncond_encoder_hidden_states_image)
-        ).sample
-
-        noise_pred = noise_pred_uncond + guidance_scale * (
-                noise_pred_text - noise_pred_uncond
-        )
-
-        # compute the previous noisy sample x_t -> x_t-1
-        latents = scheduler.step(noise_pred, t, latents).prev_sample
-
-    _latents = 1 / vae.config.scaling_factor * latents.clone()
-    images = vae.decode(_latents).sample
-    ret_pil_images = [to_pil(denormalize(image)) for image in images]
-    return ret_pil_images
 
 
 def check_args(args):
@@ -364,49 +286,13 @@ def main():
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
 
-    # Load scheduler, tokenizer and models.
-    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
-    tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder")
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
-    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet")
-    image_encoder = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
-
-    # freeze parameters of models to save more memory
-    unet.requires_grad_(False)
-    vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
-    image_encoder.requires_grad_(False)
-
-    # photo verse
-    image_adapter = PhotoVerseAdapter(
-        cross_attention_dim=unet.config.cross_attention_dim,
-        clip_embedding_dim=image_encoder.config.hidden_size,
-        num_tokens=extra_num_tokens+1
+    # Load models and tokenizer using the load_models function
+    tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, noise_scheduler = load_models(
+        pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+        extra_num_tokens=extra_num_tokens,
+        photoverse_path=args.pretrained_photoverse_path
     )
-    text_adapter = PhotoVerseAdapter(
-        cross_attention_dim=unet.config.cross_attention_dim,
-        clip_embedding_dim=image_encoder.config.hidden_size,
-        num_tokens=extra_num_tokens+1
-    )
-
-    # patch clip text transformer
-    text_encoder = patch_clip_text_transformer(text_encoder)
-
-    # set lora on textual cross attention layers add visual cross attention adapter
-    lora_config = LoraConfig(
-        lora_alpha=1,
-        lora_dropout=0.1,
-        r=64,
-        bias="none",
-        target_modules=["attn2.to_k", "attn2.to_v", "attn2.to_q"],
-    )
-    unet = inject_adapter_in_model(lora_config, unet)
-    unet = set_visual_cross_attention_adapter(unet, num_tokens=(extra_num_tokens + 1,))
-
-    if args.pretrained_photoverse_path is not None:
-        image_adapter, text_adapter, unet = load_photoverse_model(args.pretrained_photoverse_path, image_adapter, text_adapter, unet)
-
+    
     # optimizer
     # Since we patch unet after freezing, all new parameters are trainable
     unet_params_to_opt = []
@@ -574,9 +460,9 @@ def main():
                 global_step += 1
                 if global_step % args.save_steps == 0:
                     save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step)
-                    gen_images = validation(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
-                               device, image_encoder_layers_idx, extra_num_tokens, 7.5,
-                               0)
+                    gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
+                                                noise_scheduler, device, image_encoder_layers_idx, extra_num_tokens, args.guidance_scale, args.denoise_timesteps, 0)
+
                     input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size,train_dataset.size)) for img in batch["pixel_values_clip"]]
                     img_list = []

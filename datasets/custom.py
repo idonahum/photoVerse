@@ -1,12 +1,12 @@
 from PIL import Image
-from torchvision import transforms
-from torchvision.transforms import InterpolationMode
 from transformers import CLIPImageProcessor
 import os
 from torch.utils.data import Dataset
 import torch
 import numpy as np
 from utils import arcface_utils
+from datasets.utils import preprocess_image, prepare_prompt, get_torch_interpolation
+
 
 imagenet_templates_small = [
     "a photo of a {}",
@@ -39,14 +39,6 @@ imagenet_templates_small = [
 ]
 
 
-TORCH_INTERPOLATION = {
-    "nearest": InterpolationMode.NEAREST,
-    "bilinear": InterpolationMode.BILINEAR,
-    "bicubic": InterpolationMode.BICUBIC,
-    "lanczos": InterpolationMode.LANCZOS,
-}
-
-
 def is_image(file):
     return 'jpg' in file.lower()  or 'png' in file.lower()  or 'jpeg' in file.lower()
 
@@ -71,74 +63,36 @@ class CustomDataset(Dataset):
 
         if data_root:
             img_dir = os.path.join(data_root, img_subfolder)
-            self.image_paths = []
-            self.image_paths += [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
+            self.image_paths = [os.path.join(img_dir, file_path) for file_path in os.listdir(img_dir) if is_image(file_path)]
             self.image_paths = sorted(self.image_paths, key=lambda x: int(os.path.basename(x).split('.')[0]))
-
             self.num_images = len(self.image_paths)
             self._length = self.num_images
 
-        self.interpolation = TORCH_INTERPOLATION[interpolation]
-
+        self.interpolation = get_torch_interpolation(interpolation)
         self.template = template
         self.clip_image_processor = CLIPImageProcessor()
-        self.transforms = transforms.Compose([
-            transforms.Resize(self.size, interpolation=self.interpolation),
-            transforms.CenterCrop(self.size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
-        ])
 
     def __len__(self):
         return self._length
 
-    def _preprocess(self, image):
-        return self.transforms(image)
-
-    def _prepare_prompt(self, example: dict):
-        text = self.template.format(self.placeholder_token)
-        input_ids = self.tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=self.tokenizer.model_max_length,
-            return_tensors="pt",
-        ).input_ids[0]
-        example["text"] = text
-        example["text_input_ids"] = input_ids
-        example["concept_placeholder_idx"] = torch.tensor(self._find_placeholder_index(text))
+    def __getitem__(self, idx):
+        example = prepare_prompt(self.tokenizer, self.template, self.placeholder_token)
+        example = self._prepare_image(example, idx)
         return example
 
-    def _prepare_image(self, example: dict, idx: int):
+    def _prepare_image(self, example, idx):
         image_path = self.image_paths[idx]
         raw_image = Image.open(image_path)
-
-        if not raw_image.mode == "RGB":
+        if raw_image.mode != "RGB":
             raw_image = raw_image.convert("RGB")
-
-        pixel_values_clip = self.clip_image_processor(images=raw_image, return_tensors="pt").pixel_values
-        pixel_values = self._preprocess(raw_image)
-        example["pixel_values"] = pixel_values
-        example["pixel_values_clip"] = pixel_values_clip
+        example["pixel_values"] = preprocess_image(raw_image, size=self.size, interpolation=self.interpolation)
+        example["pixel_values_clip"] = self.clip_image_processor(images=raw_image, return_tensors="pt").pixel_values
         if self.face_embedding_func:
             face_analysis = self.face_embedding_func(raw_image)
             face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
             example["face_embedding"] = face_analysis['embedding']
         return example
-
-    def _find_placeholder_index(self, text: str):
-        words = text.strip().split(' ')
-        for idx, word in enumerate(words):
-            if word == self.placeholder_token:
-                return idx + 1
-        return 0
-
-    def __getitem__(self, idx):
-        example = {}
-        example = self._prepare_prompt(example)
-        example = self._prepare_image(example, idx)
-        return example
-
+    
 
 class CustomDatasetWithMasks(CustomDataset):
     def __init__(
@@ -153,7 +107,7 @@ class CustomDatasetWithMasks(CustomDataset):
         placeholder_token="*",
         template="a photo of a {}"
     ):
-        super().__init__(data_root=data_root, tokenizer=tokenizer,img_subfolder=img_subfolder,
+        super().__init__(data_root=data_root, tokenizer=tokenizer, img_subfolder=img_subfolder,
                          size=size, interpolation=interpolation,
                          placeholder_token=placeholder_token, template=template)
 
@@ -182,7 +136,7 @@ class CustomDatasetWithMasks(CustomDataset):
         clip_image[mask] = reshaped_img[mask]
 
         pixel_values_clip = self.clip_image_processor(images=clip_image, return_tensors="pt").pixel_values
-        pixel_values = self._preprocess(raw_image)
+        pixel_values = preprocess_image(raw_image, size=self.size, interpolation=self.interpolation)
         example["pixel_values"] = pixel_values
         example["pixel_values_clip"] = pixel_values_clip
         if self.face_embedding_func:
@@ -190,7 +144,7 @@ class CustomDatasetWithMasks(CustomDataset):
             face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
             example["face_embedding"] = face_analysis['embedding']
         return example
-
+    
 
 def collate_fn(batch):
     pixel_values = torch.stack([example["pixel_values"] for example in batch])
