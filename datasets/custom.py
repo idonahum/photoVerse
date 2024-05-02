@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 import torch
 import numpy as np
 from utils import arcface_utils
-from datasets.utils import preprocess_image, prepare_prompt, get_torch_interpolation
+from datasets.utils import preprocess_image, prepare_prompt
 
 
 imagenet_templates_small = [
@@ -48,7 +48,6 @@ class CustomDataset(Dataset):
         self,
         data_root,
         tokenizer,
-        face_embedding_func=None,
         img_subfolder='images',
         size=512,
         interpolation="bicubic",
@@ -59,7 +58,6 @@ class CustomDataset(Dataset):
         self.tokenizer = tokenizer
         self.size = size
         self.placeholder_token = placeholder_token
-        self.face_embedding_func = face_embedding_func
 
         if data_root:
             img_dir = os.path.join(data_root, img_subfolder)
@@ -68,7 +66,7 @@ class CustomDataset(Dataset):
             self.num_images = len(self.image_paths)
             self._length = self.num_images
 
-        self.interpolation = get_torch_interpolation(interpolation)
+        self.interpolation = interpolation
         self.template = template
         self.clip_image_processor = CLIPImageProcessor()
 
@@ -87,10 +85,7 @@ class CustomDataset(Dataset):
             raw_image = raw_image.convert("RGB")
         example["pixel_values"] = preprocess_image(raw_image, size=self.size, interpolation=self.interpolation)
         example["pixel_values_clip"] = self.clip_image_processor(images=raw_image, return_tensors="pt").pixel_values
-        if self.face_embedding_func:
-            face_analysis = self.face_embedding_func(raw_image)
-            face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
-            example["face_embedding"] = face_analysis['embedding']
+
         return example
     
 
@@ -99,7 +94,6 @@ class CustomDatasetWithMasks(CustomDataset):
         self,
         data_root,
         tokenizer,
-        face_embedding_func=None,
         img_subfolder='images',
         mask_subfolder='masks',
         size=512,
@@ -115,7 +109,6 @@ class CustomDatasetWithMasks(CustomDataset):
         mask_dir = os.path.join(data_root, mask_subfolder)
         self.masks_paths += [os.path.join(mask_dir, file_path) for file_path in os.listdir(mask_dir) if is_image(file_path)]
         self.masks_paths = sorted(self.masks_paths, key=lambda x: int(os.path.basename(x).split('.')[0]))
-        self.face_embedding_func = face_embedding_func
 
     def _prepare_image(self, example: dict, idx: int):
         image_path = self.image_paths[idx]
@@ -139,10 +132,7 @@ class CustomDatasetWithMasks(CustomDataset):
         pixel_values = preprocess_image(raw_image, size=self.size, interpolation=self.interpolation)
         example["pixel_values"] = pixel_values
         example["pixel_values_clip"] = pixel_values_clip
-        if self.face_embedding_func:
-            face_analysis = self.face_embedding_func(reshaped_img)
-            face_analysis = arcface_utils.get_largest_bbox_face_analysis(face_analysis)
-            example["face_embedding"] = face_analysis['embedding']
+
         return example
     
 
@@ -152,6 +142,7 @@ def collate_fn(batch):
     input_ids = torch.stack([example["text_input_ids"] for example in batch])
     index = torch.stack([example["concept_placeholder_idx"] for example in batch])
     text = [example["text"] for example in batch]
+
     return {
         "pixel_values": pixel_values,
         "pixel_values_clip": pixel_values_clip,

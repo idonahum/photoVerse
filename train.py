@@ -22,7 +22,7 @@ from models.modeling_utils import load_models, save_progress
 from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil
 from insightface.app import FaceAnalysis
-from utils.arcface_utils import setup_arcface_model
+from utils.arcface_utils import cosine_similarity_between_images, setup_arcface_model
 from PIL import Image
 
 logger = get_logger(__name__)
@@ -205,7 +205,7 @@ def parse_args():
     parser.add_argument(
         "--arcface_model_root_dir",
         type=str,
-        default=None,
+        default='arcface',
         help="Destination path for ArcFace models, which include face-detection and embedding models.",
     )
 
@@ -272,7 +272,7 @@ def main():
     face_analysis_func = None
     if args.arcface_model_root_dir is not None:
         setup_arcface_model(args.arcface_model_root_dir)
-        face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+        face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
         face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
         face_analysis_func = face_analysis.get
 
@@ -309,12 +309,11 @@ def main():
         num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
-    print('reached dataloader...')
     # dataloader
     if args.mask_subfolder is None:
-        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution, face_embedding_func=face_analysis_func)
+        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
     else:
-        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution, face_embedding_func=face_analysis_func)
+        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -359,6 +358,7 @@ def main():
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if override_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
     if accelerator.is_main_process:
@@ -377,7 +377,6 @@ def main():
     progress_bar.set_description("Steps")
     global_step = 0
 
-    print('reached training loop...')
     for epoch in range(0, args.num_train_epochs):
         text_adapter.train()
         image_adapter.train()
@@ -449,15 +448,17 @@ def main():
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
-            if accelerator.sync_gradients:
+            if accelerator.sync_gradients or True:
                 progress_bar.update(1)
                 global_step += 1
+
+                input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]    
+                gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
+                                            noise_scheduler, device, image_encoder_layers_idx, guidance_scale=args.guidance_scale,
+                                            timesteps=args.denoise_timesteps, token_index=0)
+            
                 if global_step % args.save_steps == 0:
                     save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step)
-                    gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
-                                                noise_scheduler, device, image_encoder_layers_idx, extra_num_tokens, args.guidance_scale, args.denoise_timesteps, 0)
-
-                    input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size,train_dataset.size)) for img in batch["pixel_values_clip"]]
                     img_list = []
                     for gen_img, input_img, clip_img in zip(gen_images, input_images, clip_images):
@@ -468,8 +469,14 @@ def main():
                     img_grid.save(img_grid_file)
                     if args.report_to == "wandb":
                         images = wandb.Image(img_grid_file, caption="Generated images vs input images")
-                    logs = {"Generated images vs input images": images}
-                    accelerator.log(logs, step=global_step)
+                        logs = {"Generated images vs input images": images}
+                        accelerator.log(logs, step=global_step)
+
+            if face_analysis_func is not None:
+                # TODO: its slow, not efficient (need to use Torch, ONNX has some issue with GPU), and should be edited to a more stable loss.
+                # MAYBE: https://medium.com/@payyavulasaiprakash/arcface-loss-function-for-deep-face-recognition-e1ff5e173b52
+                arcface_score = np.mean([cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for input_image, gen_image in zip(input_images, gen_images)])
+                accelerator.log({"arcface_loss": 1 - abs(arcface_score)})
 
             logs = {"loss_mle": diffusion_loss.detach().item(),
                     "loss_reg_concept_text": concept_text_loss.detach().item(),
