@@ -167,6 +167,7 @@ def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*")
     Returns:
         dict: Prepared text data containing 'text', 'text_input_ids', and 'concept_placeholder_idx'.
     """
+    # TODO: we might have an issue here with input_ids[0]
     text = template.format(placeholder_token)
     input_ids = tokenizer(
         text,
@@ -205,6 +206,11 @@ def random_batch_slicing(example, batch_size, num_of_samples):
     sliced_batch = {}
     indices = torch.randperm(batch_size)[:num_of_samples]
     for key, value in example.items():
-        sliced_batch[key] = value[indices]
+        if isinstance(value, torch.Tensor):
+            sliced_batch[key] = value[indices]
+        elif isinstance(value, list):
+            sliced_batch[key] = [value[i] for i in indices]
+        else:
+            sliced_batch[key] = value
     return sliced_batch
 
