@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, scheduler = load_models(pretrained_model_name_or_path, extra_num_tokens, photoverse_path)
+    tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, scheduler, _ = load_models(pretrained_model_name_or_path, extra_num_tokens, photoverse_path)
 
     # Trandsfer models and adapters to the specified device
     vae.to(device)
