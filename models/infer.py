@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 @torch.no_grad()
 def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler,
-                  device, image_encoder_layers_idx, latent_size=64, guidance_scale=1, timesteps=100, token_index=0):
+                  device, image_encoder_layers_idx, latent_size=64, guidance_scale=1, timesteps=100, token_index=0, disable_tqdm=False):
 
     scheduler = DPMSolverMultistepScheduler.from_config(scheduler.config)
     uncond_input = tokenizer(
@@ -58,7 +58,7 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
                                           "concept_text_embeddings": concept_text_embeddings,
                                           "concept_placeholder_idx": placeholder_idx.detach()})[0]
 
-    for t in tqdm(scheduler.timesteps, desc="Denoising"):
+    for t in tqdm(scheduler.timesteps, desc="Denoising", disable=disable_tqdm):
         latent_model_input = scheduler.scale_model_input(latents, t)
 
         # TODO: fix this error, after refactor methods from this script to shared utils.
