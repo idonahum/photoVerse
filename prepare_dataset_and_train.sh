@@ -6,4 +6,4 @@
 train_folder=/home/lab/haimzis/projects/photoVerse/CelebaHQMaskDataset/train
 #arcface_models_path=$(echo "$output" | awk '/ArcFace models folder:/ {print $NF}')
 
-CUDA_VISIBLE_DEVICES="0" accelerate launch --config_file single_gpu.json train.py --data_root_path $train_folder --mask_subfolder masks --output_dir exp2 --max_train_steps 40000 --train_batch_size 32 --report_to wandb --save_steps 2000
+CUDA_VISIBLE_DEVICES="0" accelerate launch --config_file single_gpu.json train.py --data_root_path $train_folder --mask_subfolder masks --output_dir exp2 --max_train_steps 40000 --train_batch_size 32 --report_to wandb
