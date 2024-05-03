@@ -1,6 +1,6 @@
 from PIL import Image
 from torchvision import transforms
-
+import numpy as np
 
 def denormalize(image):
     """
@@ -26,3 +26,14 @@ def to_pil(image):
     image = image.detach().cpu().permute(1, 2, 0).numpy()
     image = (image * 255).round().astype("uint8")
     return Image.fromarray(image)
+
+
+def save_images_grid(gen_images, input_images, clip_images, img_grid_file):
+    img_list = []
+    for gen_img, input_img, clip_img in zip(gen_images, input_images, clip_images):
+        img_list.append(
+            np.concatenate((np.array(gen_img), np.array(input_img), np.array(clip_img)), axis=1))
+    img_list = np.concatenate(img_list, axis=0)
+    img_grid = Image.fromarray(img_list)
+
+    img_grid.save(img_grid_file)
