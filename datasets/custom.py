@@ -4,7 +4,6 @@ import os
 from torch.utils.data import Dataset
 import torch
 import numpy as np
-from utils import arcface_utils
 from datasets.utils import preprocess_image, prepare_prompt
 
 
