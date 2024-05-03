@@ -167,7 +167,6 @@ def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*")
     Returns:
         dict: Prepared text data containing 'text', 'text_input_ids', and 'concept_placeholder_idx'.
     """
-    # TODO: we might have an issue here with input_ids[0]
     text = template.format(placeholder_token)
     input_ids = tokenizer(
         text,

@@ -1,5 +1,3 @@
-from diffusers import DPMSolverMultistepScheduler
-
 from utils.image_utils import denormalize, to_pil
 import torch
 
@@ -62,10 +60,10 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
         latent_model_input = scheduler.scale_model_input(latents, t)
 
         # TODO: fix this error, after refactor methods from this script to shared utils.
-        # ERROR:
+        # ERROR:     
         # hidden_states = hidden_states.reshape(batch, height, width, inner_dim).permute(0, 3, 1, 2).contiguous()
         # RuntimeError: shape '[3, 1, 1, 320]' is invalid for input of size 2880
-
+        
         # Noise prediction based on conditional inputs (text + image)
         noise_pred_text = unet(
             latent_model_input,

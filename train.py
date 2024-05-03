@@ -194,14 +194,14 @@ def parse_args():
     parser.add_argument(
         '--denoise_timesteps',
         type=int,
-        default=10,
+        default=10, 
         help='Number of timesteps for inference'
     )
 
     parser.add_argument(
         '--guidance_scale',
         type=float,
-        default=2.0,
+        default=1.0,
         help='Guidance scale for inference'
     )
 
