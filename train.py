@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from accelerate.logging import get_logger
 from tqdm import tqdm
 from diffusers.optimization import get_scheduler
+from peft import LoraConfig
 from accelerate import Accelerator
 from accelerate.utils import set_seed, ProjectConfiguration
 from huggingface_hub import Repository
@@ -209,6 +210,33 @@ def parse_args():
         help="Destination path for ArcFace models, which include face-detection and embedding models.",
     )
 
+    parser.add_argument(
+        "--use_lora",
+        action="store_true",
+        help="Whether to use LORA for the textual cross attention layers."
+    )
+
+    parser.add_argument(
+        "--lora_alpha",
+        type=float,
+        default=1,
+        help="LORA alpha parameter."
+    )
+
+    parser.add_argument(
+        "--lora_dropout",
+        type=float,
+        default=0.1,
+        help="LORA dropout parameter."
+    )
+
+    parser.add_argument(
+        "--lora_rank",
+        type=int,
+        default=64,
+        help="LORA rank parameter."
+    )
+
     parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
     parser.add_argument("--cpu", action="store_true", help="If passed, will train on the CPU.")
     args = parser.parse_args()
@@ -280,13 +308,25 @@ def main():
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
 
+    lora_config = None
+    if args.use_lora:
+        lora_config = LoraConfig(
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            r=args.lora_rank,
+            bias="none",
+            target_modules=["attn2.to_k", "attn2.to_v", "attn2.to_q"],
+        )
+
     # Load models and tokenizer using the load_models function
-    tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, noise_scheduler = load_models(
+    tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, noise_scheduler, lora_config = load_models(
         pretrained_model_name_or_path=args.pretrained_model_name_or_path,
         extra_num_tokens=extra_num_tokens,
-        photoverse_path=args.pretrained_photoverse_path
+        photoverse_path=args.pretrained_photoverse_path,
+        use_lora=args.use_lora,
+        lora_config=lora_config,
     )
-    
+
     # optimizer
     # Since we patch unet after freezing, all new parameters are trainable
     unet_params_to_opt = []
@@ -458,7 +498,7 @@ def main():
                                             timesteps=args.denoise_timesteps, token_index=0)
             
                 if global_step % args.save_steps == 0:
-                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step)
+                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step, lora_config=lora_config)
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size,train_dataset.size)) for img in batch["pixel_values_clip"]]
                     img_list = []
                     for gen_img, input_img, clip_img in zip(gen_images, input_images, clip_images):
