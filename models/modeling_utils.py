@@ -81,14 +81,13 @@ def load_models(pretrained_model_name_or_path, extra_num_tokens, photoverse_path
     # set lora on textual cross attention layers add visual cross attention adapter
     unet = set_visual_cross_attention_adapter(unet, num_tokens=(extra_num_tokens + 1,))
 
-    lora_config_pretrained = None
-    if photoverse_path is not None:
-        # Load pretrained weights into models
-        image_adapter, text_adapter, unet, lora_config_pretrained = load_photoverse_model(photoverse_path, image_adapter, text_adapter, unet)
-
     if use_lora:
         assert lora_config is not None, "Lora config is required when using lora"
         unet = inject_adapter_in_model(lora_config, unet)
-    lora_config = lora_config_pretrained if lora_config is None else lora_config
+
+    if photoverse_path is not None:
+        # Load pretrained weights into models, if lora is used, it will overwrite the lora config
+        image_adapter, text_adapter, unet, lora_config = load_photoverse_model(photoverse_path, image_adapter, text_adapter, unet)
+
 
     return tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, scheduler, lora_config
