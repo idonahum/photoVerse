@@ -17,11 +17,13 @@ from huggingface_hub import Repository
 import wandb
 
 from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
+from datasets.utils import random_batch_slicing
 from models.infer import run_inference
 from models.unet import get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
 from models.modeling_utils import load_models, save_progress
+from models.loss import face_loss
 from utils.hub import get_full_repo_name
-from utils.image_utils import denormalize, denormalize_clip, to_pil
+from utils.image_utils import denormalize, denormalize_clip, to_pil, save_images_grid
 from insightface.app import FaceAnalysis
 from utils.arcface_utils import cosine_similarity_between_images, setup_arcface_model
 from PIL import Image
@@ -120,11 +122,19 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--save_steps",
+        "--checkpoint_save_steps",
         type=int,
         default=2000,
         help=(
             "Save a checkpoint of the training state every X updates"
+        ),
+    )
+    parser.add_argument(
+        "--samples_save_steps",
+        type=int,
+        default=500,
+        help=(
+            "Save samples of the training state every X updates"
         ),
     )
     parser.add_argument(
@@ -184,14 +194,14 @@ def parse_args():
     parser.add_argument(
         '--denoise_timesteps',
         type=int,
-        default=10, 
+        default=10,
         help='Number of timesteps for inference'
     )
 
     parser.add_argument(
         '--guidance_scale',
         type=float,
-        default=1.0,
+        default=2.0,
         help='Guidance scale for inference'
     )
 
@@ -208,6 +218,19 @@ def parse_args():
         type=str,
         default='arcface',
         help="Destination path for ArcFace models, which include face-detection and embedding models.",
+    )
+
+    parser.add_argument(
+        "--use_face_loss",
+        action="store_true",
+        help="Whether to use face loss in the training process."
+    )
+
+    parser.add_argument(
+        "--face_loss_sample_ratio",
+        type=float,
+        default=0.25,
+        help="Ratio of the batch of images to use for face loss calculation."
     )
 
     parser.add_argument(
@@ -255,7 +278,11 @@ def check_args(args):
         raise ValueError("The number of image encoder layers to use as tokens should be equal to extra_num_tokens")
 
     if 0 in args.image_encoder_layers_idx:
-        raise ValueError("The image encoder extra tokens layers cant be the last layer since we always use the last layer")
+        raise ValueError(
+            "The image encoder extra tokens layers cant be the last layer since we always use the last layer")
+
+    if args.use_face_loss and args.arcface_model_root_dir is None:
+        raise ValueError("If face loss is enabled, arcface_model_root_dir should be provided")
 
     args.image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx)
 
@@ -304,7 +331,6 @@ def main():
         face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
         face_analysis_func = face_analysis.get
 
-
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
 
@@ -336,10 +362,10 @@ def main():
 
     params_to_opt = itertools.chain(image_adapter.parameters(), text_adapter.parameters(), unet_params_to_opt)
     optimizer = torch.optim.AdamW(params_to_opt, lr=args.learning_rate,
-        betas=(args.adam_beta1, args.adam_beta2),
-        weight_decay=args.adam_weight_decay,
-        eps=args.adam_epsilon,
-    )
+                                  betas=(args.adam_beta1, args.adam_beta2),
+                                  weight_decay=args.adam_weight_decay,
+                                  eps=args.adam_epsilon,
+                                  )
 
     # learning rate scheduler
     lr_scheduler = get_scheduler(
@@ -351,9 +377,11 @@ def main():
 
     # dataloader
     if args.mask_subfolder is None:
-        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+        train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
+                                      tokenizer=tokenizer, size=args.resolution)
     else:
-        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder, tokenizer=tokenizer, size=args.resolution)
+        train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
+                                               tokenizer=tokenizer, size=args.resolution)
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -437,7 +465,8 @@ def main():
                 bsz = latents.shape[0]
 
                 # Sample a random timestep for each image
-                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device).long()
+                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,),
+                                          device=latents.device).long()
 
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
@@ -445,8 +474,10 @@ def main():
 
                 # get image_emmbeddings from last layers + extra layers from image_encoder hidden states
                 image_features = image_encoder(pixel_values_clip, output_hidden_states=True)
-                image_embeddings = [image_features[0]] + [image_features[2][i] for i in image_encoder_layers_idx if i < len(image_features[2])]
-                assert len(image_embeddings) == extra_num_tokens + 1, "Entered indices are out of range for image_encoder layers."
+                image_embeddings = [image_features[0]] + [image_features[2][i] for i in image_encoder_layers_idx if
+                                                          i < len(image_features[2])]
+                assert len(
+                    image_embeddings) == extra_num_tokens + 1, "Entered indices are out of range for image_encoder layers."
                 image_embeddings = [emb.detach() for emb in image_embeddings]
 
                 # run through text_adapter
@@ -460,7 +491,8 @@ def main():
                 encoder_hidden_states_image = image_adapter(image_embeddings)
 
                 # Run the UNet
-                noise_pred = unet(noisy_latents, timesteps, encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)).sample
+                noise_pred = unet(noisy_latents, timesteps,
+                                  encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)).sample
 
                 # Calculate concept text regularizer
                 concept_text_loss = torch.abs(concept_text_embeddings).mean() * 0.01
@@ -472,7 +504,21 @@ def main():
                 # Calculate loss
                 diffusion_loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
 
-                loss = diffusion_loss + concept_text_loss + cross_attn_visual_loss
+                # Calculate face loss if needed
+                floss = torch.zeros(1, dtype=torch.float32).to(device)
+                if args.use_face_loss:
+                    num_samples = int(args.face_loss_sample_ratio * pixel_values.shape[0])
+
+                    sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
+                    input_images = [to_pil(denormalize(img)) for img in sliced_batch["pixel_values"]]
+                    gen_images = run_inference(sliced_batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                                               image_adapter, vae,
+                                               noise_scheduler, device, image_encoder_layers_idx,
+                                               guidance_scale=args.guidance_scale,
+                                               timesteps=10, token_index=0, disable_tqdm=True)
+                    floss = (face_loss(input_images, gen_images, face_analysis_func) * 0.01).to(device)
+
+                loss = diffusion_loss + concept_text_loss + cross_attn_visual_loss + floss
 
                 # Backward
                 accelerator.backward(loss)
@@ -488,40 +534,40 @@ def main():
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
-            if accelerator.sync_gradients or True:
+            if accelerator.sync_gradients:
                 progress_bar.update(1)
                 global_step += 1
 
-                input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]    
-                gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae,
-                                            noise_scheduler, device, image_encoder_layers_idx, guidance_scale=args.guidance_scale,
-                                            timesteps=args.denoise_timesteps, token_index=0)
-            
-                if global_step % args.save_steps == 0:
-                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step, lora_config=lora_config)
-                    clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size,train_dataset.size)) for img in batch["pixel_values_clip"]]
-                    img_list = []
-                    for gen_img, input_img, clip_img in zip(gen_images, input_images, clip_images):
-                        img_list.append(np.concatenate((np.array(gen_img), np.array(input_img), np.array(clip_img)), axis=1))
-                    img_list = np.concatenate(img_list, axis=0)
-                    img_grid = Image.fromarray(img_list)
+                if global_step % args.samples_save_steps == 0:
+                    input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
+                    gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                                               image_adapter, vae,
+                                               noise_scheduler, device, image_encoder_layers_idx,
+                                               guidance_scale=args.guidance_scale,
+                                               timesteps=args.denoise_timesteps, token_index=0)
+                    similarity_metric = np.mean(
+                            [cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for
+                            input_image, gen_image in zip(input_images, gen_images)])
+                    input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
+                    clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
+                                   img in batch["pixel_values_clip"]]
                     img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
-                    img_grid.save(img_grid_file)
+                    save_images_grid(gen_images, input_images, clip_images, img_grid_file)
                     if args.report_to == "wandb":
                         images = wandb.Image(img_grid_file, caption="Generated images vs input images")
-                        logs = {"Generated images vs input images": images}
+                        logs = {"Generated images vs input images": images, "face_similarity": similarity_metric}
                         accelerator.log(logs, step=global_step)
 
-            if face_analysis_func is not None:
-                # TODO: its slow, not efficient (need to use Torch, ONNX has some issue with GPU), and should be edited to a more stable loss.
-                # MAYBE: https://medium.com/@payyavulasaiprakash/arcface-loss-function-for-deep-face-recognition-e1ff5e173b52
-                arcface_score = np.mean([cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for input_image, gen_image in zip(input_images, gen_images)])
-                accelerator.log({"arcface_loss": 1 - abs(arcface_score)})
+                if global_step % args.checkpoint_save_steps == 0:
+                    save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step,
+                                  lora_config=lora_config)
 
             logs = {"loss_mle": diffusion_loss.detach().item(),
                     "loss_reg_concept_text": concept_text_loss.detach().item(),
                     "loss_reg_cross_attn_visual": cross_attn_visual_loss.detach().item(),
                     "lr": lr_scheduler.get_last_lr()[0]}
+            if args.use_face_loss:
+                logs["loss_face"] = floss.detach().item()
 
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
