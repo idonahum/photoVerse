@@ -272,7 +272,7 @@ def main():
     face_analysis_func = None
     if args.arcface_model_root_dir is not None:
         setup_arcface_model(args.arcface_model_root_dir)
-        face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
+        face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
         face_analysis_func = face_analysis.get
 
@@ -473,8 +473,6 @@ def main():
                         accelerator.log(logs, step=global_step)
 
             if face_analysis_func is not None:
-                # TODO: its slow, not efficient (need to use Torch, ONNX has some issue with GPU), and should be edited to a more stable loss.
-                # MAYBE: https://medium.com/@payyavulasaiprakash/arcface-loss-function-for-deep-face-recognition-e1ff5e173b52
                 arcface_score = np.mean([cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for input_image, gen_image in zip(input_images, gen_images)])
                 accelerator.log({"arcface_loss": 1 - abs(arcface_score)})
 
