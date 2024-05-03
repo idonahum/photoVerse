@@ -5,10 +5,19 @@ import gdown
 import shutil
 import zipfile
 from tqdm import tqdm
+import torch
+from torchvision import transforms
+
 
 NUM_OF_IMAGES_IN_CELEBAHQ = 30000
 MASKS_LABEL_LIST_CELEBAHQ = ['skin', 'nose', 'eye_g', 'l_eye', 'r_eye', 'l_brow', 'r_brow', 'l_ear', 'r_ear', 'mouth', 'u_lip', 'l_lip', 'hair', 'hat', 'ear_r', 'neck_l', 'neck', 'cloth']
 
+TORCH_INTERPOLATION = {
+    "nearest": transforms.InterpolationMode.NEAREST,
+    "bilinear": transforms.InterpolationMode.BILINEAR,
+    "bicubic": transforms.InterpolationMode.BICUBIC,
+    "lanczos": transforms.InterpolationMode.LANCZOS,
+}
 
 def make_folder(path):
     if not os.path.exists(os.path.join(path)):
@@ -123,4 +132,85 @@ def split_celebhqmasks_train_test(src_img_folder, src_masks_folder, dest_folder,
             pbar.update(1)
 
     return os.path.join(dest_folder, 'train'), os.path.join(dest_folder, 'test')
+
+
+def preprocess_image(raw_image, size=512, interpolation="bicubic"):
+    """
+    Preprocess a raw image using the provided size and interpolation.
+
+    Args:
+        raw_image (PIL.Image): The raw image to preprocess.
+        size (int): Target size for resizing.
+        interpolation (str): Interpolation method for resizing.
+
+    Returns:
+        torch.Tensor: Processed image tensor.
+    """
+    transform = transforms.Compose([
+        transforms.Resize(size, interpolation=get_torch_interpolation(interpolation)),
+        transforms.CenterCrop(size),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5], [0.5]),
+    ])
+    return transform(raw_image)
+
+
+def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*"):
+    """
+    Prepare prompt text and its input IDs.
+
+    Args:
+        tokenizer (Tokenizer): Tokenizer to use for text input processing.
+        template (str): Template string for creating text inputs.
+        placeholder_token (str): Placeholder token used in the template.
+
+    Returns:
+        dict: Prepared text data containing 'text', 'text_input_ids', and 'concept_placeholder_idx'.
+    """
+    # TODO: we might have an issue here with input_ids[0]
+    text = template.format(placeholder_token)
+    input_ids = tokenizer(
+        text,
+        padding="max_length",
+        truncation=True,
+        max_length=tokenizer.model_max_length,
+        return_tensors="pt",
+    ).input_ids
+    concept_placeholder_idx = torch.tensor([_find_placeholder_index(text, placeholder_token)])
+    return {'text': text, 'text_input_ids': input_ids, 'concept_placeholder_idx': concept_placeholder_idx}
+
+
+def get_torch_interpolation(interpolation):
+    """
+    Convert string interpolation method to PyTorch interpolation constant.
+
+    Args:
+        interpolation (str): Interpolation method in string format.
+
+    Returns:
+        int: PyTorch interpolation constant.
+    """
+    return TORCH_INTERPOLATION[interpolation]
+
+
+def _find_placeholder_index(text, placeholder_token="*"):
+    words = text.strip().split(' ')
+    for idx, word in enumerate(words):
+        if word == placeholder_token:
+            return idx + 1
+    return 0
+
+
+def random_batch_slicing(example, batch_size, num_of_samples):
+    assert batch_size >= num_of_samples, "Batch size should be greater or equal to the number of samples"
+    sliced_batch = {}
+    indices = torch.randperm(batch_size)[:num_of_samples]
+    for key, value in example.items():
+        if isinstance(value, torch.Tensor):
+            sliced_batch[key] = value[indices]
+        elif isinstance(value, list):
+            sliced_batch[key] = [value[i] for i in indices]
+        else:
+            sliced_batch[key] = value
+    return sliced_batch
 

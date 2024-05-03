@@ -1,8 +1,9 @@
-import torch.nn.functional as F
+import numpy as np
 import gdown
 import zipfile
 import os
 from huggingface_hub import hf_hub_download
+from PIL import Image
 
 
 def setup_arcface_model(root_dir):
@@ -69,7 +70,7 @@ def get_largest_bbox_face_analysis(face_analyses):
     - largest_face_analysis: The face analysis object with the largest bounding box.
     """
     if not face_analyses:
-        raise ValueError("The face_analyses list is empty.")
+        return []
 
     # Sort face analyses by the area of their bounding boxes
     sorted_face_analyses = sorted(
@@ -96,16 +97,31 @@ def cosine_similarity_between_images(image1, image2, face_analysis_func):
     Returns:
     - cosine_similarity_value: The cosine similarity between the embeddings of the two images.
     """
-    face_analysis1 = face_analysis_func.get(image1)
-    face_analysis2 = face_analysis_func.get(image2)
+    if isinstance(image1, Image.Image):  # If PIL Image
+        image1 = np.array(image1)
 
-    embedding1 = get_largest_bbox_face_analysis(face_analysis1)['embedding']
-    embedding2 = get_largest_bbox_face_analysis(face_analysis2)['embedding']
+    if isinstance(image2, Image.Image):  # If PIL Image
+        image2 = np.array(image2)
 
-    # Calculate cosine similarity between the two embeddings
-    cosine_similarity_value = F.cosine_similarity(embedding1, embedding2, dim=0).item()  # Get cosine similarity value
+    face_analysis1 = face_analysis_func(image1)
+    face_analysis2 = face_analysis_func(image2)
+    
+    best_face_analysis1 = get_largest_bbox_face_analysis(face_analysis1)
+    best_face_analysis2 = get_largest_bbox_face_analysis(face_analysis2)
 
-    return cosine_similarity_value
+    if best_face_analysis1 and best_face_analysis2:
+        embedding1 = best_face_analysis1['embedding']
+        embedding2 = best_face_analysis2['embedding']
+
+        # Calculate cosine similarity between the two embeddings
+        cosine_similarity_value = np.dot(embedding1, embedding2) / (
+            np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
+        )
+
+        return cosine_similarity_value
+    
+    else: 
+        return 0
 
 
 def download_face_detection_models(dest_dir, file_id="1HJ4MlkOOqUQwxaRCPaCVh22Wpdi_Uhwj"):

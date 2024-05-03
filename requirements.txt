@@ -8,6 +8,6 @@ opencv-python==4.9.0.80
 opencv-fixer==0.2.5
 insightface==0.7.3
 gdown==5.1.0
-onnxruntime==1.17.3
+onnx==1.16.0
 onnxruntime-gpu==1.17.1
 debugpy==1.6.5
