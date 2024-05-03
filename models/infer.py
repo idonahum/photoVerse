@@ -1,3 +1,5 @@
+from diffusers import DPMSolverMultistepScheduler
+
 from utils.image_utils import denormalize, to_pil
 import torch
 
@@ -5,7 +7,10 @@ from tqdm import tqdm
 
 
 @torch.no_grad()
-def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler, device, image_encoder_layers_idx, latent_size=64, guidance_scale=1, timesteps=100, token_index=0):
+def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler,
+                  device, image_encoder_layers_idx, latent_size=64, guidance_scale=1, timesteps=100, token_index=0):
+
+    scheduler = DPMSolverMultistepScheduler.from_config(scheduler.config)
     uncond_input = tokenizer(
         [''] * example["pixel_values"].shape[0],
         padding="max_length",
@@ -34,8 +39,11 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
     encoder_hidden_states_image = image_adapter(image_embeddings)
 
     # get unconditional image embeddings
-    uncond_image_features = image_encoder(torch.zeros_like(example["pixel_values_clip"]).to(device), output_hidden_states=True)
-    uncond_image_emmbedings = [uncond_image_features[0]] + [uncond_image_features[2][i] for i in image_encoder_layers_idx if i < len(uncond_image_features[2])]
+    uncond_image_features = image_encoder(torch.zeros_like(example["pixel_values_clip"]).to(device),
+                                          output_hidden_states=True)
+    uncond_image_emmbedings = [uncond_image_features[0]] + [uncond_image_features[2][i] for i in
+                                                            image_encoder_layers_idx if
+                                                            i < len(uncond_image_features[2])]
     uncond_image_emmbedings = [emb.detach() for emb in uncond_image_emmbedings]
     uncond_encoder_hidden_states_image = image_adapter(uncond_image_emmbedings)
 
@@ -54,10 +62,10 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
         latent_model_input = scheduler.scale_model_input(latents, t)
 
         # TODO: fix this error, after refactor methods from this script to shared utils.
-        # ERROR:     
+        # ERROR:
         # hidden_states = hidden_states.reshape(batch, height, width, inner_dim).permute(0, 3, 1, 2).contiguous()
         # RuntimeError: shape '[3, 1, 1, 320]' is invalid for input of size 2880
-        
+
         # Noise prediction based on conditional inputs (text + image)
         noise_pred_text = unet(
             latent_model_input,
