@@ -199,3 +199,13 @@ def _find_placeholder_index(text, placeholder_token="*"):
         if word == placeholder_token:
             return idx + 1
     return 0
+
+
+def random_batch_slicing(example, batch_size, num_of_samples):
+    assert batch_size >= num_of_samples, "Batch size should be greater or equal to the number of samples"
+    sliced_batch = {}
+    indices = torch.randperm(batch_size)[:num_of_samples]
+    for key, value in example.items():
+        sliced_batch[key] = value[indices]
+    return sliced_batch
+
