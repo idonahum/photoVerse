@@ -1,3 +1,4 @@
+from diffusers import DPMSolverMultistepScheduler
 from utils.image_utils import denormalize, to_pil
 import torch
 
