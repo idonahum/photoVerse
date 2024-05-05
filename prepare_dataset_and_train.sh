@@ -1,9 +1,2 @@
-# output=$(python prepare_celebhqmasks.py)
-
-# Parse the output to extract train_folder, test_folder, and save_path
-# train_folder=$(echo "$output" | awk '/Train folder:/ {print $NF}')
-# test_folder=$(echo "$output" | awk '/Test folder:/ {print $NF}')
-train_folder=/home/lab/haimzis/projects/photoVerse/CelebaHQMaskDataset/train
-#arcface_models_path=$(echo "$output" | awk '/ArcFace models folder:/ {print $NF}')
-
-CUDA_VISIBLE_DEVICES="0" accelerate launch --config_file single_gpu.json train.py --data_root_path $train_folder --mask_subfolder masks --output_dir exp2 --max_train_steps 40000 --train_batch_size 32 --report_to wandb
+# python prepare_celebhqmasks.py
+accelerate launch --config_file single_gpu.json train.py --data_root_path CelebaHQMaskDataset/train --mask_subfolder masks --output_dir facenet_finetune --max_train_steps 40000 --train_batch_size 16  --pretrained_photoverse_path weights/photoverse_final_with_lora_config.pt --report_to wandb --use_facenet_loss

@@ -18,10 +18,11 @@ import wandb
 
 from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
 from datasets.utils import random_batch_slicing
+from utils.facenet_similarity import FacenetSimilarity
 from models.infer import run_inference
 from models.unet import get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
 from models.modeling_utils import load_models, save_progress
-from models.loss import face_loss
+from models.loss import arcface_loss, facenet_loss
 from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil, save_images_grid
 from insightface.app import FaceAnalysis
@@ -221,9 +222,15 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--use_face_loss",
+        "--use_arcface_loss",
         action="store_true",
         help="Whether to use face loss in the training process."
+    )
+
+    parser.add_argument(
+        "--use_facenet_loss",
+        action="store_true",
+        help="Whether to use FaceNet loss in the training process."
     )
 
     parser.add_argument(
@@ -281,9 +288,12 @@ def check_args(args):
         raise ValueError(
             "The image encoder extra tokens layers cant be the last layer since we always use the last layer")
 
-    if args.use_face_loss and args.arcface_model_root_dir is None:
-        raise ValueError("If face loss is enabled, arcface_model_root_dir should be provided")
+    if args.use_arcface_loss and args.arcface_model_root_dir is None:
+        raise ValueError("If arcface loss is enabled, arcface_model_root_dir should be provided")
 
+    if args.use_arcface_loss and args.use_facenet_loss is None:
+        raise ValueError("Losses arcface and facenet cannot be both calculated, choose one.")
+    
     args.image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx)
 
 
@@ -325,12 +335,18 @@ def main():
     check_args(args)
 
     face_analysis_func = None
-    if args.arcface_model_root_dir is not None:
+    facenet_similarity = None
+
+    # Initialize the Faces losses methods
+    if args.arcface_model_root_dir is not None and args.use_arcface_loss:
         setup_arcface_model(args.arcface_model_root_dir)
         face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
         face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
         face_analysis_func = face_analysis.get
-
+    
+    elif args.use_facenet_loss:
+        facenet_similarity = FacenetSimilarity()
+        
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
 
@@ -495,30 +511,44 @@ def main():
                                   encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)).sample
 
                 # Calculate concept text regularizer
-                concept_text_loss = torch.abs(concept_text_embeddings).mean() * 0.01
+                concept_text_loss = torch.abs(concept_text_embeddings).mean()
 
                 # Calculate reference image regularizer
                 cross_attn_values_norm = get_visual_cross_attention_values_norm(unet)
-                cross_attn_visual_loss = cross_attn_values_norm.mean() * 0.001
+                cross_attn_visual_loss = cross_attn_values_norm.mean()
 
                 # Calculate loss
                 diffusion_loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
 
                 # Calculate face loss if needed
                 floss = torch.zeros(1, dtype=torch.float32).to(device)
-                if args.use_face_loss:
+
+                # Calculate face loss if needed
+                if args.use_arcface_loss:
                     num_samples = int(args.face_loss_sample_ratio * pixel_values.shape[0])
 
                     sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
                     input_images = [to_pil(denormalize(img)) for img in sliced_batch["pixel_values"]]
                     gen_images = run_inference(sliced_batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
-                                               image_adapter, vae,
-                                               noise_scheduler, device, image_encoder_layers_idx,
-                                               guidance_scale=args.guidance_scale,
-                                               timesteps=10, token_index=0, disable_tqdm=True)
-                    floss = (face_loss(input_images, gen_images, face_analysis_func) * 0.01).to(device)
+                                            image_adapter, vae,
+                                            noise_scheduler, device, image_encoder_layers_idx,
+                                            guidance_scale=args.guidance_scale,
+                                            timesteps=10, token_index=0, disable_tqdm=True)
+                    arcface_loss_val = arcface_loss(input_images, gen_images, face_analysis_func).to(device)
+                    floss = arcface_loss_val
 
-                loss = diffusion_loss + concept_text_loss + cross_attn_visual_loss + floss
+                elif args.use_facenet_loss:
+                    input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
+                    gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                                            image_adapter, vae,
+                                            noise_scheduler, device, image_encoder_layers_idx,
+                                            guidance_scale=args.guidance_scale,
+                                            timesteps=10, token_index=0, disable_tqdm=True)
+                    facenet_loss_val = facenet_loss(input_images, gen_images, facenet_similarity).to(device)
+                    floss = facenet_loss_val
+
+                # Add calculated face loss to the overall loss
+                loss = diffusion_loss + concept_text_loss * 0.01 + cross_attn_visual_loss * 0.001 + floss * 0.01
 
                 # Backward
                 accelerator.backward(loss)
@@ -544,18 +574,25 @@ def main():
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
                                                guidance_scale=args.guidance_scale,
-                                               timesteps=args.denoise_timesteps, token_index=0)
-                    similarity_metric = np.mean(
-                            [cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for
-                            input_image, gen_image in zip(input_images, gen_images)])
-                    input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
+                                               timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
+                    similarity_metric = None
+                    if args.use_arcface_loss:
+                        similarity_metric = np.mean(
+                                [cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for
+                                input_image, gen_image in zip(input_images, gen_images)])
+                    elif args.use_facenet_loss:
+                        similarity_metric = np.mean(
+                                [facenet_similarity.calculate_face_similarity(input_image, gen_image) for
+                                input_image, gen_image in zip(input_images, gen_images)])
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
                                    img in batch["pixel_values_clip"]]
                     img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
                     save_images_grid(gen_images, input_images, clip_images, img_grid_file)
                     if args.report_to == "wandb":
                         images = wandb.Image(img_grid_file, caption="Generated images vs input images")
-                        logs = {"Generated images vs input images": images, "face_similarity": similarity_metric}
+                        logs = {"Generated images vs input images": images}
+                        if similarity_metric is not None:
+                            logs["face_similarity"] = similarity_metric
                         accelerator.log(logs, step=global_step)
 
                 if global_step % args.checkpoint_save_steps == 0:
@@ -566,7 +603,7 @@ def main():
                     "loss_reg_concept_text": concept_text_loss.detach().item(),
                     "loss_reg_cross_attn_visual": cross_attn_visual_loss.detach().item(),
                     "lr": lr_scheduler.get_last_lr()[0]}
-            if args.use_face_loss:
+            if args.use_arcface_loss or args.use_facenet_loss:
                 logs["loss_face"] = floss.detach().item()
 
             progress_bar.set_postfix(**logs)
