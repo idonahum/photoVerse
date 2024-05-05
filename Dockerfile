@@ -22,5 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN python -c "from opencv_fixer import AutoFix; AutoFix()"
 
+# Clone the facenet-pytorch repository into a directory named facenet_pytorch
+RUN git clone https://github.com/timesler/facenet-pytorch.git facenet_pytorch
+
 # Copy your application files (from your host to your image)
 COPY . /workspace
