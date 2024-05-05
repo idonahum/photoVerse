@@ -27,8 +27,15 @@ class PhotoVerseAdapter(nn.Module):
                                                               nn.LeakyReLU(),
                                                               nn.Linear(1024, cross_attention_dim)))
 
-    def forward(self, embs):
+    def forward(self, embs, token_index=None):
         hidden_states = ()
+        if token_index is not None and token_index != 'full':
+            token_index = int(token_index)
+            embs = embs[token_index]
+            hidden_state = getattr(self, f'mapping_{token_index}')(embs[:, :1]) + getattr(self, f'mapping_patch_{token_index}')(
+                embs[:, 1:]).mean(dim=1, keepdim=True)
+            return hidden_state
+
         for i, emb in enumerate(embs):
             hidden_state = getattr(self, f'mapping_{i}')(emb[:, :1]) + getattr(self, f'mapping_patch_{i}')(
                 emb[:, 1:]).mean(dim=1, keepdim=True)

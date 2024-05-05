@@ -41,8 +41,14 @@ def get_visual_cross_attention_values_norm(unet):
     for name, attn_processor in unet.attn_processors.items():
         if name.endswith("attn1.processor"):
             continue
-        attn_values.append(attn_processor.ip_value)
+        attn_values.append(attn_processor.to_v_ip_norm)
     cross_attn_values_norm = torch.stack(attn_values, dim=1)
     bsz = cross_attn_values_norm.shape[0]
     cross_attn_values_norm = cross_attn_values_norm.view(bsz, -1)
     return cross_attn_values_norm
+
+
+def set_cross_attention_layers_to_train(unet):
+    for name, module in unet.named_modules():
+        if 'attn2' in name:
+            module.train()
