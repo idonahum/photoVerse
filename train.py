@@ -27,7 +27,6 @@ from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil, save_images_grid
 from insightface.app import FaceAnalysis
 from utils.arcface_utils import cosine_similarity_between_images, setup_arcface_model
-from PIL import Image
 
 logger = get_logger(__name__)
 PROMPTS = ['{} in Ghibli anime style',
@@ -35,8 +34,9 @@ PROMPTS = ['{} in Ghibli anime style',
            '{} wears a red hat',
            '{} on the beach',
            'Manga drawing of {}',
-            '{} Funko Pop',
-            '{} latte art',]
+           '{} Funko Pop',
+           '{} latte art', ]
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -218,6 +218,11 @@ def parse_args():
         default=4,
         help="Number of samples to save for each prompt.",
     )
+    parser.add_argument(
+        "--save_samples_with_various_prompts",
+        action="store_true",
+        help="Whether to save samples with various prompts.",
+    )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
     parser.add_argument(
@@ -275,7 +280,7 @@ def parse_args():
     parser.add_argument(
         "--lora_rank",
         type=int,
-        default=64,
+        default=8,
         help="LORA rank parameter."
     )
 
@@ -305,7 +310,7 @@ def check_args(args):
 
     if args.use_arcface_loss and args.use_facenet_loss is None:
         raise ValueError("Losses arcface and facenet cannot be both calculated, choose one.")
-    
+
     args.image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx)
 
 
@@ -355,10 +360,10 @@ def main():
         face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
         face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
         face_analysis_func = face_analysis.get
-    
+
     elif args.use_facenet_loss:
         facenet_similarity = FacenetSimilarity()
-        
+
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
 
@@ -542,20 +547,20 @@ def main():
                     sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
                     input_images = [to_pil(denormalize(img)) for img in sliced_batch["pixel_values"]]
                     gen_images = run_inference(sliced_batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
-                                            image_adapter, vae,
-                                            noise_scheduler, device, image_encoder_layers_idx,
-                                            guidance_scale=args.guidance_scale,
-                                            timesteps=10, token_index=0, disable_tqdm=True)
+                                               image_adapter, vae,
+                                               noise_scheduler, device, image_encoder_layers_idx,
+                                               guidance_scale=args.guidance_scale,
+                                               timesteps=10, token_index=0, disable_tqdm=True)
                     arcface_loss_val = arcface_loss(input_images, gen_images, face_analysis_func).to(device)
                     floss = arcface_loss_val
 
                 elif args.use_facenet_loss:
                     input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
                     gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
-                                            image_adapter, vae,
-                                            noise_scheduler, device, image_encoder_layers_idx,
-                                            guidance_scale=args.guidance_scale,
-                                            timesteps=10, token_index=0, disable_tqdm=True)
+                                               image_adapter, vae,
+                                               noise_scheduler, device, image_encoder_layers_idx,
+                                               guidance_scale=args.guidance_scale,
+                                               timesteps=10, token_index=0, disable_tqdm=True)
                     facenet_loss_val = facenet_loss(input_images, gen_images, facenet_similarity).to(device)
                     floss = facenet_loss_val
 
@@ -590,12 +595,12 @@ def main():
                     similarity_metric = None
                     if args.use_arcface_loss:
                         similarity_metric = np.mean(
-                                [cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for
-                                input_image, gen_image in zip(input_images, gen_images)])
+                            [cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for
+                             input_image, gen_image in zip(input_images, gen_images)])
                     elif args.use_facenet_loss:
                         similarity_metric = np.mean(
-                                [facenet_similarity.calculate_face_similarity(input_image, gen_image) for
-                                input_image, gen_image in zip(input_images, gen_images)])
+                            [facenet_similarity.calculate_face_similarity(input_image, gen_image) for
+                             input_image, gen_image in zip(input_images, gen_images)])
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
                                    img in batch["pixel_values_clip"]]
                     grid_data = [("Input Images", input_images[:args.num_of_samples_to_save]),
@@ -607,11 +612,13 @@ def main():
                             example = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
                             example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
                             example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
-                            gen_images = run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                            gen_images = run_inference(example, tokenizer, image_encoder, text_encoder, unet,
+                                                       text_adapter,
                                                        image_adapter, vae,
                                                        noise_scheduler, device, image_encoder_layers_idx,
                                                        guidance_scale=args.guidance_scale,
-                                                       timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
+                                                       timesteps=args.denoise_timesteps, token_index=0,
+                                                       disable_tqdm=True)
                             grid_data.append((prompt, gen_images))
                         img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
                         save_images_grid(grid_data, img_grid_file)
