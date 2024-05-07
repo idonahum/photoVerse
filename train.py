@@ -17,7 +17,7 @@ from huggingface_hub import Repository
 import wandb
 
 from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
-from datasets.utils import random_batch_slicing
+from datasets.utils import random_batch_slicing, prepare_prompt
 from utils.facenet_similarity import FacenetSimilarity
 from models.infer import run_inference
 from models.unet import get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
@@ -30,7 +30,13 @@ from utils.arcface_utils import cosine_similarity_between_images, setup_arcface_
 from PIL import Image
 
 logger = get_logger(__name__)
-
+PROMPTS = ['{} in Ghibli anime style',
+           '{} in Disney & Pixar style',
+           '{} wears a red hat',
+           '{} on the beach',
+           'Manga drawing of {}',
+            '{} Funko Pop',
+            '{} latte art',]
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -206,6 +212,12 @@ def parse_args():
         help='Guidance scale for inference'
     )
 
+    parser.add_argument(
+        "--num_of_samples_to_save",
+        type=int,
+        default=4,
+        help="Number of samples to save for each prompt.",
+    )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
     parser.add_argument(
@@ -586,8 +598,23 @@ def main():
                                 input_image, gen_image in zip(input_images, gen_images)])
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
                                    img in batch["pixel_values_clip"]]
-                    img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
-                    save_images_grid(gen_images, input_images, clip_images, img_grid_file)
+                    grid_data = [("Input Images", input_images[:args.num_of_samples_to_save]),
+                                 ("Condition Images", clip_images[:args.num_of_samples_to_save]),
+                                 (batch["text"][0], gen_images[:args.num_of_samples_to_save])]
+
+                    if args.save_samples_with_various_prompts:
+                        for prompt in PROMPTS:
+                            example = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
+                            example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
+                            example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
+                            gen_images = run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                                                       image_adapter, vae,
+                                                       noise_scheduler, device, image_encoder_layers_idx,
+                                                       guidance_scale=args.guidance_scale,
+                                                       timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
+                            grid_data.append((prompt, gen_images))
+                        img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
+                        save_images_grid(grid_data, img_grid_file)
                     if args.report_to == "wandb":
                         images = wandb.Image(img_grid_file, caption="Generated images vs input images")
                         logs = {"Generated images vs input images": images}
