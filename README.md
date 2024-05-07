@@ -61,7 +61,7 @@ python prepare_celebhqmasks.py --save_path='./CelebaHQMaskDataset' --gdrive_file
 
 Execute the training script using the following command:
 ```bash
-accelerate launch --config_file single_gpu.json train.py --data_root_path CelebaHQMaskDataset/train --mask_subfolder masks --output_dir facenet_finetune --max_train_steps 40000 --train_batch_size 32 --use_facenet_loss
+accelerate launch --config_file single_gpu.json train.py --data_root_path CelebaHQMaskDataset/train --mask_subfolder masks --output_dir photoverse_arcface_lora --max_train_steps 40000 --train_batch_size 16  --pretrained_photoverse_path weights/photoverse_final_with_lora_config.pt --report_to wandb --use_facenet_loss
 ```
 
 ### 4. Inference
