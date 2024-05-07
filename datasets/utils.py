@@ -37,6 +37,8 @@ def create_celebahq_masks(masks_path, save_path, force_create=False, num_of_imag
             folder_num = k // 2000
             im_base = np.zeros((512, 512))
             for idx, label in enumerate(MASKS_LABEL_LIST_CELEBAHQ):
+                if label in ['ear_r','neck','neck_r','cloth']:
+                    continue
                 filename = os.path.join(masks_path, str(folder_num), str(k).rjust(5, '0') + '_' + label + '.png')
                 if os.path.exists(filename):
                     im = cv2.imread(filename)
@@ -155,7 +157,7 @@ def preprocess_image(raw_image, size=512, interpolation="bicubic"):
     return transform(raw_image)
 
 
-def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*"):
+def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*", num_of_samples=None):
     """
     Prepare prompt text and its input IDs.
 
@@ -163,6 +165,7 @@ def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*")
         tokenizer (Tokenizer): Tokenizer to use for text input processing.
         template (str): Template string for creating text inputs.
         placeholder_token (str): Placeholder token used in the template.
+        num_of_samples (int): Number of samples to generate. Defaults to None - single sample.
 
     Returns:
         dict: Prepared text data containing 'text', 'text_input_ids', and 'concept_placeholder_idx'.
@@ -177,6 +180,10 @@ def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*")
         return_tensors="pt",
     ).input_ids
     concept_placeholder_idx = torch.tensor([_find_placeholder_index(text, placeholder_token)])
+    if num_of_samples:
+        text = [text] * num_of_samples
+        input_ids = input_ids.repeat(num_of_samples, 1)
+        concept_placeholder_idx = concept_placeholder_idx.repeat(num_of_samples, 1)
     return {'text': text, 'text_input_ids': input_ids, 'concept_placeholder_idx': concept_placeholder_idx}
 
 
@@ -197,7 +204,7 @@ def _find_placeholder_index(text, placeholder_token="*"):
     words = text.strip().split(' ')
     for idx, word in enumerate(words):
         if word == placeholder_token:
-            return idx + 1
+            return idx
     return 0
 
 
