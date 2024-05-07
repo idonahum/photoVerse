@@ -123,9 +123,11 @@ class CustomDatasetWithMasks(CustomDataset):
             raw_mask = raw_mask.convert("L")
 
         reshaped_img = np.array(raw_image.resize(raw_mask.size))
-        mask = np.where(np.array(raw_mask))
+        mask_np = np.array(raw_mask)
+        mask = np.where(mask_np)
         clip_image = np.zeros_like(reshaped_img)
         clip_image[mask] = reshaped_img[mask]
+        clip_image = self._crop_to_mask_and_scale(clip_image, mask_np)  # crop the image to the mask
 
         pixel_values_clip = self.clip_image_processor(images=clip_image, return_tensors="pt").pixel_values
         pixel_values = preprocess_image(raw_image, size=self.size, interpolation=self.interpolation)
@@ -133,7 +135,37 @@ class CustomDatasetWithMasks(CustomDataset):
         example["pixel_values_clip"] = pixel_values_clip
 
         return example
-    
+
+    def _crop_to_mask_and_scale(self, clip_image, mask_np):
+        # Find the bounding box of the mask
+        mask_np = np.where(mask_np > 0, 255, 0).astype(np.uint8)
+        rows = np.any(mask_np, axis=1)
+        cols = np.any(mask_np, axis=0)
+        ymin, ymax = np.where(rows)[0][[0, -1]]
+        xmin, xmax = np.where(cols)[0][[0, -1]]
+
+        # scale the bounding box by 1.3
+        height = ymax - ymin
+        width = xmax - xmin
+        ymin = max(0, int(ymin - height * 0.15))
+        ymax = min(mask_np.shape[0], int(ymax + height * 0.15))
+        xmin = max(0, int(xmin - width * 0.15))
+        xmax = min(mask_np.shape[1], int(xmax + width * 0.15))
+
+        crop_width = xmax - xmin
+        crop_height = ymax - ymin
+        if crop_width > crop_height:
+            crop_height = crop_width
+            ymax = min(mask_np.shape[0], ymax + crop_height // 2)
+            ymin = max(0, ymin - crop_height // 2)
+        elif crop_height > crop_width:
+            crop_width = crop_height
+            xmax = min(mask_np.shape[1], xmax + crop_width // 2)
+            xmin = max(0, xmin - crop_width // 2)
+
+        crop_image = clip_image[ymin:ymax, xmin:xmax]
+        return crop_image
+
 
 def collate_fn(batch):
     pixel_values = torch.stack([example["pixel_values"] for example in batch])
