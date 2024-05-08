@@ -592,7 +592,12 @@ def main():
 
                 if global_step % args.samples_save_steps == 0:
                     input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
-                    example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=args.num_of_samples_to_save)
+                    if args.use_random_prompts:
+                        example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=len(input_images))
+                        batch["text"] = example["text"]
+                        batch["text_input_ids"] = example["text_input_ids"]
+                        batch["concept_placeholder_idx"] = example["concept_placeholder_idx"]
+
                     gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
