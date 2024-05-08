@@ -51,7 +51,7 @@ class CustomDataset(Dataset):
         size=512,
         interpolation="bicubic",
         placeholder_token="*",
-        template="a photo of a {}",
+        template="a photo of {}",
         use_random_templates=False
     ):
         self.data_root = data_root
@@ -103,7 +103,7 @@ class CustomDatasetWithMasks(CustomDataset):
         size=512,
         interpolation="bicubic",
         placeholder_token="*",
-        template="a photo of a {}",
+        template="a photo of {}",
         use_random_templates=False
     ):
         super().__init__(data_root=data_root, tokenizer=tokenizer, img_subfolder=img_subfolder,
