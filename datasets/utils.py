@@ -204,7 +204,7 @@ def _find_placeholder_index(text, placeholder_token="*"):
     words = text.strip().split(' ')
     for idx, word in enumerate(words):
         if word == placeholder_token:
-            return idx
+            return idx + 1
     return 0
 
 
