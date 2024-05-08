@@ -25,7 +25,7 @@ parser.add_argument("--guidance_scale", type=float, default=1.0, help="Guidance 
 parser.add_argument("--checkpoint_path", type=str, default="exp1/40k_simple.pt", help="Path to the model checkpoint")
 parser.add_argument("--input_image_path", type=str, default='/home/lab/haimzis/projects/photoVerse/CelebaHQMaskDataset/train/images/23.jpg', help="Path to the input image")
 parser.add_argument("--output_image_path", type=str, default="generated_image", help="Prefix for the generated image")
-parser.add_argument("--num_timesteps", type=int, default=50, help="Number of timesteps for inference")
+parser.add_argument("--num_timesteps", type=int, default=25, help="Number of timesteps for inference")
 parser.add_argument("--results_dir", type=str, default="results", help="Directory to save the generated images")
 parser.add_argument("--text", type=str, default="a photo of a {}", help="Prompt template for image generation")
 
