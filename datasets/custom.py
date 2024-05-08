@@ -51,7 +51,8 @@ class CustomDataset(Dataset):
         size=512,
         interpolation="bicubic",
         placeholder_token="*",
-        template="a photo of a {}",
+        template="a photo of {}",
+        use_random_templates=False
     ):
         self.data_root = data_root
         self.tokenizer = tokenizer
@@ -67,13 +68,17 @@ class CustomDataset(Dataset):
 
         self.interpolation = interpolation
         self.template = template
+        self.use_random_templates = use_random_templates
         self.clip_image_processor = CLIPImageProcessor()
 
     def __len__(self):
         return self._length
 
     def __getitem__(self, idx):
-        example = prepare_prompt(self.tokenizer, self.template, self.placeholder_token)
+        template = self.template
+        if self.use_random_templates:
+            template = np.random.choice(imagenet_templates_small)
+        example = prepare_prompt(self.tokenizer, template, self.placeholder_token)
         example = self._prepare_image(example, idx)
         return example
 
@@ -98,11 +103,12 @@ class CustomDatasetWithMasks(CustomDataset):
         size=512,
         interpolation="bicubic",
         placeholder_token="*",
-        template="a photo of a {}"
+        template="a photo of {}",
+        use_random_templates=False
     ):
         super().__init__(data_root=data_root, tokenizer=tokenizer, img_subfolder=img_subfolder,
                          size=size, interpolation=interpolation,
-                         placeholder_token=placeholder_token, template=template)
+                         placeholder_token=placeholder_token, template=template, use_random_templates=use_random_templates)
 
         self.masks_paths = []
         mask_dir = os.path.join(data_root, mask_subfolder)

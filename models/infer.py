@@ -8,7 +8,7 @@ from tqdm import tqdm
 @torch.no_grad()
 def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler,
                   device, image_encoder_layers_idx, latent_size=64, guidance_scale=1, timesteps=100, token_index=0,
-                  disable_tqdm=False):
+                  disable_tqdm=False, seed=None):
     scheduler = DPMSolverMultistepScheduler.from_config(scheduler.config)
     uncond_input = tokenizer(
         [''] * example["pixel_values"].shape[0],
@@ -17,9 +17,14 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
         return_tensors="pt",
     )
 
-    latents = torch.randn(
-        (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size)
-    )
+    if seed is None:
+        latents = torch.randn(
+            (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size)
+        )
+    else:
+        generator = torch.manual_seed(seed)
+        latents = torch.randn(
+            (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size), generator=generator)
 
     scheduler.set_timesteps(timesteps)
     latents = latents.to(device)

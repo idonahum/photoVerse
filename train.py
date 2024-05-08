@@ -223,6 +223,11 @@ def parse_args():
         action="store_true",
         help="Whether to save samples with various prompts.",
     )
+    parser.add_argument(
+        "--use_random_prompts",
+        action="store_true",
+        help="Whether to use random prompts for training.",
+    )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
     parser.add_argument(
@@ -411,10 +416,10 @@ def main():
     # dataloader
     if args.mask_subfolder is None:
         train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
-                                      tokenizer=tokenizer, size=args.resolution)
+                                      tokenizer=tokenizer, size=args.resolution, use_random_templates=args.use_random_prompts)
     else:
         train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
-                                               tokenizer=tokenizer, size=args.resolution)
+                                               tokenizer=tokenizer, size=args.resolution, use_random_templates=args.use_random_prompts)
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -587,6 +592,12 @@ def main():
 
                 if global_step % args.samples_save_steps == 0:
                     input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
+                    if args.use_random_prompts:
+                        example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=len(input_images))
+                        batch["text"] = example["text"]
+                        batch["text_input_ids"] = example["text_input_ids"]
+                        batch["concept_placeholder_idx"] = example["concept_placeholder_idx"]
+
                     gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
