@@ -2,9 +2,10 @@ from PIL import Image, ImageDraw, ImageFont
 from torchvision import transforms
 import numpy as np
 
+
 def denormalize(image):
     """
-    Denormalize the image from [-1, 1] to [0, 255]
+    Denormalize the image from [-1, 1] to [0, 1]
     """
     image = (image / 2 + 0.5).clamp(0, 1)
     return image
