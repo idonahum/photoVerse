@@ -1,15 +1,19 @@
 from diffusers import DPMSolverMultistepScheduler
-from utils.image_utils import denormalize, to_pil
+from utils.image_utils import denormalize
 import torch
 
 from tqdm import tqdm
 
 
-@torch.no_grad()
 def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler,
                   device, image_encoder_layers_idx, latent_size=64, guidance_scale=1, timesteps=100, token_index=0,
-                  disable_tqdm=False, seed=None):
+                  disable_tqdm=False, seed=None, from_noised_image=False):
+
+    # Load and set the scheduler
     scheduler = DPMSolverMultistepScheduler.from_config(scheduler.config)
+    scheduler.set_timesteps(timesteps)
+
+    # Create the unconditional input ids
     uncond_input = tokenizer(
         [''] * example["pixel_values"].shape[0],
         padding="max_length",
@@ -17,16 +21,25 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
         return_tensors="pt",
     )
 
+    # Create the noise
     if seed is None:
-        latents = torch.randn(
+        noise = torch.randn(
             (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size)
         )
     else:
         generator = torch.manual_seed(seed)
-        latents = torch.randn(
+        noise = torch.randn(
             (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size), generator=generator)
 
-    scheduler.set_timesteps(timesteps)
+    # Setup the latent depending if we are using the noised image or not
+    if from_noised_image:
+        latents = vae.encode(example["pixel_values"].to(device)).latent_dist.sample().detach()
+        latents = latents * vae.config.scaling_factor
+        latents = scheduler.add_noise(latents, noise, scheduler.timesteps)
+
+    else:
+        latents = noise
+
     latents = latents.to(device)
     latents = latents * scheduler.init_noise_sigma
 
@@ -54,7 +67,7 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
     uncond_embeddings = text_encoder({'text_input_ids': uncond_input.input_ids.to(device)})[0]
     encoder_hidden_states = text_encoder({'text_input_ids': example["text_input_ids"].to(device),
                                           "concept_text_embeddings": concept_text_embeddings,
-                                          "concept_placeholder_idx": placeholder_idx.detach()})[0]
+                                          "concept_placeholder_idx": placeholder_idx})[0]
 
     for t in tqdm(scheduler.timesteps, desc="Denoising", disable=disable_tqdm):
         latent_model_input = scheduler.scale_model_input(latents, t)
@@ -85,5 +98,5 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
 
     _latents = 1 / vae.config.scaling_factor * latents.clone()
     images = vae.decode(_latents).sample
-    ret_pil_images = [to_pil(denormalize(image)) for image in images]
-    return ret_pil_images
+    images = denormalize(images)
+    return images

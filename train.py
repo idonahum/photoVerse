@@ -361,10 +361,7 @@ def main():
 
     # Initialize the Faces losses methods
     if args.arcface_model_root_dir is not None and args.use_arcface_loss:
-        setup_arcface_model(args.arcface_model_root_dir)
-        face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
-        face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
-        face_analysis_func = face_analysis.get
+        arcface_similarity = None #TODO Finish this
 
     elif args.use_facenet_loss:
         facenet_similarity = FacenetSimilarity()
@@ -523,7 +520,7 @@ def main():
 
                 encoder_hidden_states = text_encoder({'text_input_ids': text_input_ids,
                                                       "concept_text_embeddings": concept_text_embeddings,
-                                                      "concept_placeholder_idx": placeholder_idx.detach()})[0]
+                                                      "concept_placeholder_idx": placeholder_idx})[0]
 
                 # run through image_adapter
                 encoder_hidden_states_image = image_adapter(image_embeddings)
@@ -546,28 +543,21 @@ def main():
                 floss = torch.zeros(1, dtype=torch.float32).to(device)
 
                 # Calculate face loss if needed
-                if args.use_arcface_loss:
-                    num_samples = int(args.face_loss_sample_ratio * pixel_values.shape[0])
-
-                    sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
-                    input_images = [to_pil(denormalize(img)) for img in sliced_batch["pixel_values"]]
-                    gen_images = run_inference(sliced_batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
-                                               image_adapter, vae,
-                                               noise_scheduler, device, image_encoder_layers_idx,
-                                               guidance_scale=args.guidance_scale,
-                                               timesteps=10, token_index=0, disable_tqdm=True)
-                    arcface_loss_val = arcface_loss(input_images, gen_images, face_analysis_func).to(device)
-                    floss = arcface_loss_val
-
-                elif args.use_facenet_loss:
-                    input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
+                if args.use_arcface_loss or args.use_face_loss:
+                    example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=bsz)
+                    batch.update(example)
                     gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
                                                guidance_scale=args.guidance_scale,
-                                               timesteps=10, token_index=0, disable_tqdm=True)
-                    facenet_loss_val = facenet_loss(input_images, gen_images, facenet_similarity).to(device)
-                    floss = facenet_loss_val
+                                               timesteps=10, token_index=0, disable_tqdm=True)*255
+                    if args.use_arcface_loss:
+                        # TODO - Haim to edit this
+                        arcface_loss_val = arcface_loss(batch["pixel_values"], gen_images).to(device)
+                    else:
+                        # TODO - Haim to edit this
+                        facenet_loss_val = facenet_loss(batch["pixel_values"], gen_images, facenet_similarity).to(device)
+                    floss = arcface_loss_val if args.use_arcface_loss else facenet_loss_val
 
                 # Add calculated face loss to the overall loss
                 loss = diffusion_loss + concept_text_loss * 0.01 + cross_attn_visual_loss * 0.001 + floss * 0.01
@@ -594,24 +584,21 @@ def main():
                     input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
                     if args.use_random_prompts:
                         example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=len(input_images))
-                        batch["text"] = example["text"]
-                        batch["text_input_ids"] = example["text_input_ids"]
-                        batch["concept_placeholder_idx"] = example["concept_placeholder_idx"]
+                        batch.update(example)
 
-                    gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                    gen_tensors = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
                                                guidance_scale=args.guidance_scale,
                                                timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
+                    gen_images = [to_pil(denormalize(img)) for img in gen_tensors]
+
                     similarity_metric = None
-                    if args.use_arcface_loss:
-                        similarity_metric = np.mean(
-                            [cosine_similarity_between_images(input_image, gen_image, face_analysis_func) for
-                             input_image, gen_image in zip(input_images, gen_images)])
+                    if args.use_arcface_loss or args.use_facenet_loss:
+                        similarity_metric = 0 # TODO, After Haim finish put the current call
                     elif args.use_facenet_loss:
-                        similarity_metric = np.mean(
-                            [facenet_similarity.calculate_face_similarity(input_image, gen_image) for
-                             input_image, gen_image in zip(input_images, gen_images)])
+                        similarity_metric = 0 # TODO, After Haim finish put the current call
+
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
                                    img in batch["pixel_values_clip"]]
                     grid_data = [("Input Images", input_images[:args.num_of_samples_to_save]),
