@@ -16,7 +16,7 @@ from huggingface_hub import Repository
 import wandb
 
 from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
-from datasets.utils import prepare_prompt
+from datasets.utils import prepare_prompt, random_batch_slicing
 from models.infer import run_inference
 from models.unet import get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
 from models.modeling_utils import load_models, save_progress
@@ -239,6 +239,13 @@ def parse_args():
         default=None,
         choices=["arcface", "facenet"],
         help="The face loss to use in the training process."
+    )
+
+    parser.add_argument(
+        "--face_loss_sample_ratio",
+        type=float,
+        default=0.125,
+        help="Ratio of the batch of images to use for face loss calculation."
     )
 
     parser.add_argument(
@@ -514,9 +521,11 @@ def main():
 
                 # Calculate face loss if needed
                 if face_loss is not None:
-                    example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=bsz)
-                    batch.update(example)
-                    gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                    num_samples = int(args.face_loss_sample_ratio * pixel_values.shape[0])
+                    sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
+                    example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=num_samples)
+                    sliced_batch.update(example)
+                    gen_images = run_inference(sliced_batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
                                                guidance_scale=args.guidance_scale,
@@ -561,7 +570,7 @@ def main():
 
                     similarity_metric = None
                     if face_loss is not None:
-                        similarity_metric = face_loss(batch["pixel_values"], gen_tensors, normalize=False,
+                        similarity_metric = face_loss(pixel_values, gen_tensors, normalize=False,
                                                       maximize=False).detach().item()
 
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
