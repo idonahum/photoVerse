@@ -579,10 +579,8 @@ def main():
                                  (batch["text"][0], gen_images[:args.num_of_samples_to_save])]
 
                     if args.save_samples_with_various_prompts:
-                        example = {}
-                        example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
-                        example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
-                        # del batch
+                        example = {"pixel_values_clip": batch["pixel_values_clip"][:args.num_of_samples_to_save],
+                                   "pixel_values": batch["pixel_values"][:args.num_of_samples_to_save]}
                         for prompt in PROMPTS:
                             example_to_update = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
                             example.update(example_to_update)
