@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 import itertools
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from accelerate.logging import get_logger
@@ -17,16 +16,13 @@ from huggingface_hub import Repository
 import wandb
 
 from datasets.custom import CustomDataset, CustomDatasetWithMasks, collate_fn
-from datasets.utils import random_batch_slicing, prepare_prompt
-from utils.facenet_similarity import FacenetSimilarity
+from datasets.utils import prepare_prompt, random_batch_slicing
 from models.infer import run_inference
 from models.unet import get_visual_cross_attention_values_norm, set_cross_attention_layers_to_train
 from models.modeling_utils import load_models, save_progress
-from models.loss import arcface_loss, facenet_loss
+from models.loss import FaceLoss
 from utils.hub import get_full_repo_name
 from utils.image_utils import denormalize, denormalize_clip, to_pil, save_images_grid
-from insightface.app import FaceAnalysis
-from utils.arcface_utils import cosine_similarity_between_images, setup_arcface_model
 
 logger = get_logger(__name__)
 PROMPTS = ['{} in Ghibli anime style',
@@ -201,7 +197,7 @@ def parse_args():
     parser.add_argument(
         '--denoise_timesteps',
         type=int,
-        default=25,
+        default=10,
         help='Number of timesteps for inference'
     )
 
@@ -236,23 +232,13 @@ def parse_args():
         default=None,
         help="The name of the repository to keep in sync with the local `output_dir`.",
     )
+
     parser.add_argument(
-        "--arcface_model_root_dir",
+        "--face_loss",
         type=str,
-        default='arcface',
-        help="Destination path for ArcFace models, which include face-detection and embedding models.",
-    )
-
-    parser.add_argument(
-        "--use_arcface_loss",
-        action="store_true",
-        help="Whether to use face loss in the training process."
-    )
-
-    parser.add_argument(
-        "--use_facenet_loss",
-        action="store_true",
-        help="Whether to use FaceNet loss in the training process."
+        default=None,
+        choices=["arcface", "facenet"],
+        help="The face loss to use in the training process."
     )
 
     parser.add_argument(
@@ -298,7 +284,6 @@ def parse_args():
 
     return args
 
-
 def check_args(args):
     if args.extra_num_tokens < 0:
         raise ValueError("extra_num_tokens should be greater than or equal to 0")
@@ -309,12 +294,6 @@ def check_args(args):
     if 0 in args.image_encoder_layers_idx:
         raise ValueError(
             "The image encoder extra tokens layers cant be the last layer since we always use the last layer")
-
-    if args.use_arcface_loss and args.arcface_model_root_dir is None:
-        raise ValueError("If arcface loss is enabled, arcface_model_root_dir should be provided")
-
-    if args.use_arcface_loss and args.use_facenet_loss is None:
-        raise ValueError("Losses arcface and facenet cannot be both calculated, choose one.")
 
     args.image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx)
 
@@ -356,15 +335,10 @@ def main():
 
     check_args(args)
 
-    face_analysis_func = None
-    facenet_similarity = None
-
     # Initialize the Faces losses methods
-    if args.arcface_model_root_dir is not None and args.use_arcface_loss:
-        arcface_similarity = None #TODO Finish this
-
-    elif args.use_facenet_loss:
-        facenet_similarity = FacenetSimilarity()
+    face_loss = None
+    if args.face_loss:
+        face_loss = FaceLoss(device=accelerator.device, model_name=args.face_loss)
 
     extra_num_tokens = args.extra_num_tokens
     image_encoder_layers_idx = args.image_encoder_layers_idx
@@ -413,10 +387,12 @@ def main():
     # dataloader
     if args.mask_subfolder is None:
         train_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
-                                      tokenizer=tokenizer, size=args.resolution, use_random_templates=args.use_random_prompts)
+                                      tokenizer=tokenizer, size=args.resolution,
+                                      use_random_templates=args.use_random_prompts)
     else:
         train_dataset = CustomDatasetWithMasks(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
-                                               tokenizer=tokenizer, size=args.resolution, use_random_templates=args.use_random_prompts)
+                                               tokenizer=tokenizer, size=args.resolution,
+                                               use_random_templates=args.use_random_prompts)
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -538,26 +514,22 @@ def main():
 
                 # Calculate loss
                 diffusion_loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
-
                 # Calculate face loss if needed
                 floss = torch.zeros(1, dtype=torch.float32).to(device)
 
                 # Calculate face loss if needed
-                if args.use_arcface_loss or args.use_face_loss:
+                if face_loss is not None:
+                    num_samples = max(int(args.face_loss_sample_ratio * pixel_values.shape[0]),1)
                     example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=bsz)
                     batch.update(example)
-                    gen_images = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                    sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
+                    gen_images = run_inference(sliced_batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
                                                guidance_scale=args.guidance_scale,
-                                               timesteps=10, token_index=0, disable_tqdm=True)*255
-                    if args.use_arcface_loss:
-                        # TODO - Haim to edit this
-                        arcface_loss_val = arcface_loss(batch["pixel_values"], gen_images).to(device)
-                    else:
-                        # TODO - Haim to edit this
-                        facenet_loss_val = facenet_loss(batch["pixel_values"], gen_images, facenet_similarity).to(device)
-                    floss = arcface_loss_val if args.use_arcface_loss else facenet_loss_val
+                                               timesteps=10, token_index=0, disable_tqdm=True, from_noised_image=True, training_mode=True)
+
+                    floss = face_loss(sliced_batch['pixel_values'].to(device), gen_images, normalize=False)
 
                 # Add calculated face loss to the overall loss
                 loss = diffusion_loss + concept_text_loss * 0.01 + cross_attn_visual_loss * 0.001 + floss * 0.01
@@ -581,23 +553,24 @@ def main():
                 global_step += 1
 
                 if global_step % args.samples_save_steps == 0:
+                    torch.cuda.empty_cache()
                     input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
                     if args.use_random_prompts:
                         example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=len(input_images))
                         batch.update(example)
-
-                    gen_tensors = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
-                                               image_adapter, vae,
-                                               noise_scheduler, device, image_encoder_layers_idx,
-                                               guidance_scale=args.guidance_scale,
-                                               timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
+                    with torch.no_grad():
+                        gen_tensors = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                                                    image_adapter, vae,
+                                                    noise_scheduler, device, image_encoder_layers_idx,
+                                                    guidance_scale=args.guidance_scale,
+                                                    timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
                     gen_images = [to_pil(denormalize(img)) for img in gen_tensors]
 
                     similarity_metric = None
-                    if args.use_arcface_loss or args.use_facenet_loss:
-                        similarity_metric = 0 # TODO, After Haim finish put the current call
-                    elif args.use_facenet_loss:
-                        similarity_metric = 0 # TODO, After Haim finish put the current call
+                    if face_loss is not None:
+                        with torch.no_grad():
+                            similarity_metric = face_loss(pixel_values, gen_tensors, normalize=False,
+                                                          maximize=False).detach().item()
 
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
                                    img in batch["pixel_values_clip"]]
@@ -606,20 +579,24 @@ def main():
                                  (batch["text"][0], gen_images[:args.num_of_samples_to_save])]
 
                     if args.save_samples_with_various_prompts:
+                        example = {"pixel_values_clip": batch["pixel_values_clip"][:args.num_of_samples_to_save],
+                                   "pixel_values": batch["pixel_values"][:args.num_of_samples_to_save]}
                         for prompt in PROMPTS:
-                            example = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
-                            example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
-                            example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
-                            gen_images = run_inference(example, tokenizer, image_encoder, text_encoder, unet,
-                                                       text_adapter,
-                                                       image_adapter, vae,
-                                                       noise_scheduler, device, image_encoder_layers_idx,
-                                                       guidance_scale=args.guidance_scale,
-                                                       timesteps=args.denoise_timesteps, token_index=0,
-                                                       disable_tqdm=True)
+                            example_to_update = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
+                            example.update(example_to_update)
+                            with torch.no_grad():
+                                gen_images = run_inference(example, tokenizer, image_encoder, text_encoder, unet,
+                                                           text_adapter,
+                                                           image_adapter, vae,
+                                                           noise_scheduler, device, image_encoder_layers_idx,
+                                                           guidance_scale=args.guidance_scale,
+                                                           timesteps=args.denoise_timesteps, token_index=0,
+                                                           disable_tqdm=True).to('cpu') # offload to cpu
+                            gen_images = [to_pil(denormalize(img)) for img in gen_images]
                             grid_data.append((prompt, gen_images))
-                        img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
-                        save_images_grid(grid_data, img_grid_file)
+                    img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
+                    save_images_grid(grid_data, img_grid_file)
+                    torch.cuda.empty_cache()
                     if args.report_to == "wandb":
                         images = wandb.Image(img_grid_file, caption="Generated images vs input images")
                         logs = {"Generated images vs input images": images}
@@ -635,7 +612,7 @@ def main():
                     "loss_reg_concept_text": concept_text_loss.detach().item(),
                     "loss_reg_cross_attn_visual": cross_attn_visual_loss.detach().item(),
                     "lr": lr_scheduler.get_last_lr()[0]}
-            if args.use_arcface_loss or args.use_facenet_loss:
+            if args.face_loss:
                 logs["loss_face"] = floss.detach().item()
 
             progress_bar.set_postfix(**logs)
