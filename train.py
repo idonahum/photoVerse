@@ -244,7 +244,7 @@ def parse_args():
     parser.add_argument(
         "--face_loss_sample_ratio",
         type=float,
-        default=0.5,
+        default=0.25,
         help="Ratio of the batch of images to use for face loss calculation."
     )
 
