@@ -1,2 +1,2 @@
 python prepare_celebhqmasks.py
-accelerate launch --config_file single_gpu.json train.py --data_root_path CelebaHQMaskDataset/train --mask_subfolder masks --output_dir photoverse_arcface_lora_rank64 --max_train_steps 60000 --train_batch_size 4  --report_to wandb --face_loss arcface --use_lora --lora_rank 128 --save_samples_with_various_prompts
+accelerate launch --config_file single_gpu.json train.py --data_root_path CelebaHQMaskDataset/train --mask_subfolder masks --output_dir photoverse_arcface_lora_rank64 --max_train_steps 60000 --train_batch_size 8  --report_to wandb --face_loss arcface --use_lora --lora_rank 128 --save_samples_with_various_prompts
