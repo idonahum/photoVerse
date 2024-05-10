@@ -553,8 +553,7 @@ def main():
                 global_step += 1
 
                 if global_step % args.samples_save_steps == 0:
-                    # delete variables from training loop
-                    del pixel_values_clip, placeholder_idx, text_input_ids, latents, noise, noisy_latents, image_features, image_embeddings, concept_text_embeddings, encoder_hidden_states, encoder_hidden_states_image, noise_pred
+                    torch.cuda.empty_cache()
                     input_images = [to_pil(denormalize(img)) for img in batch["pixel_values"]]
                     if args.use_random_prompts:
                         example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=len(input_images))
