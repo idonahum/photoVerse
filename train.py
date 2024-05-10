@@ -529,7 +529,7 @@ def main():
                                                guidance_scale=args.guidance_scale,
                                                timesteps=10, token_index=0, disable_tqdm=True, from_noised_image=True, training_mode=True)
 
-                    floss = face_loss(batch['pixel_values'].to(device), gen_images, normalize=False)
+                    floss = face_loss(sliced_batch['pixel_values'].to(device), gen_images, normalize=False)
 
                 # Add calculated face loss to the overall loss
                 loss = diffusion_loss + concept_text_loss * 0.01 + cross_attn_visual_loss * 0.001 + floss * 0.01
