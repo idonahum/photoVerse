@@ -581,11 +581,13 @@ def main():
                                  (batch["text"][0], gen_images[:args.num_of_samples_to_save])]
 
                     if args.save_samples_with_various_prompts:
+                        example = {}
+                        example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
+                        example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
+                        del batch
                         for prompt in PROMPTS:
-                            example = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
-                            example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
-                            example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
-                            del batch
+                            example_to_update = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
+                            example.update(example_to_update)
                             with torch.no_grad():
                                 gen_images = run_inference(example, tokenizer, image_encoder, text_encoder, unet,
                                                            text_adapter,
