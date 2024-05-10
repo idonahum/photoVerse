@@ -521,7 +521,7 @@ def main():
 
                 # Calculate face loss if needed
                 if face_loss is not None:
-                    num_samples = min(int(args.face_loss_sample_ratio * pixel_values.shape[0]),1)
+                    num_samples = max(int(args.face_loss_sample_ratio * pixel_values.shape[0]),1)
                     example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=bsz)
                     batch.update(example)
                     sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
