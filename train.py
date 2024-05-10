@@ -522,9 +522,9 @@ def main():
                 # Calculate face loss if needed
                 if face_loss is not None:
                     num_samples = int(args.face_loss_sample_ratio * pixel_values.shape[0])
+                    example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=bsz)
+                    batch.update(example)
                     sliced_batch = random_batch_slicing(batch, pixel_values.shape[0], num_samples)
-                    example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=num_samples)
-                    sliced_batch.update(example)
                     gen_images = run_inference(sliced_batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
