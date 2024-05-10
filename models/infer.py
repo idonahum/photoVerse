@@ -97,6 +97,5 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
         latents = scheduler.step(noise_pred, t, latents).prev_sample
 
     _latents = 1 / vae.config.scaling_factor * latents.clone()
-    images = vae.decode(_latents).sample
-    images = denormalize(images)
+    images = vae.decode(_latents).sample.clamp(-1, 1)
     return images
