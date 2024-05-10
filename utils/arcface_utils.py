@@ -2,6 +2,8 @@ import numpy as np
 import gdown
 import zipfile
 import os
+
+import torch.hub
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
@@ -105,7 +107,7 @@ def cosine_similarity_between_images(image1, image2, face_analysis_func):
 
     face_analysis1 = face_analysis_func(image1)
     face_analysis2 = face_analysis_func(image2)
-    
+
     best_face_analysis1 = get_largest_bbox_face_analysis(face_analysis1)
     best_face_analysis2 = get_largest_bbox_face_analysis(face_analysis2)
 
@@ -115,12 +117,12 @@ def cosine_similarity_between_images(image1, image2, face_analysis_func):
 
         # Calculate cosine similarity between the two embeddings
         cosine_similarity_value = np.dot(embedding1, embedding2) / (
-            np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
+                np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
         )
 
         return cosine_similarity_value
-    
-    else: 
+
+    else:
         return 0
 
 
@@ -152,3 +154,24 @@ def download_face_detection_models(dest_dir, file_id="1HJ4MlkOOqUQwxaRCPaCVh22Wp
     # Remove the zip file after extraction
     os.remove(zip_file_path)
     print(f"File downloaded and extracted to {dest_dir}")
+
+
+def download_arcface_pytorch(dest_dir=torch.hub.get_dir(), file_id='1Oled0dzlDhtuTc0kShExuvAaB0grmIA_'):
+    """
+    Downloads the ArcFace PyTorch model from Google Drive using the file ID.
+    :param dest_dir: Destination directory for the downloaded model file.
+    :param file_id: Google Drive file ID for the ArcFace PyTorch model.
+    """
+    # Create the direct download URL
+    file_url = f"https://drive.google.com/uc?id={file_id}&export=download"
+
+    # Path for the downloaded model file
+    if not os.path.exists(dest_dir):
+        os.makedirs(dest_dir)
+
+    full_path = os.path.join(dest_dir, 'arcface_resnet18.pth')
+    if not os.path.exists(full_path):
+        # Download the model file
+        gdown.download(file_url, full_path, quiet=False)
+        print(f"Model downloaded to {full_path}")
+    return full_path
