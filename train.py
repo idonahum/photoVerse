@@ -520,7 +520,7 @@ def main():
                                                image_adapter, vae,
                                                noise_scheduler, device, image_encoder_layers_idx,
                                                guidance_scale=args.guidance_scale,
-                                               timesteps=10, token_index=0, disable_tqdm=True, from_noised_image=True)
+                                               timesteps=1, token_index=0, disable_tqdm=True, from_noised_image=True)
 
                     floss = face_loss(batch["pixel_values"], gen_images, normalize=False)
 
