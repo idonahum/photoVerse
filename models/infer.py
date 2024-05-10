@@ -25,22 +25,21 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
     if seed is None:
         noise = torch.randn(
             (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size)
-        )
+        ).to(device)
     else:
         generator = torch.manual_seed(seed)
         noise = torch.randn(
-            (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size), generator=generator)
+            (example["pixel_values"].shape[0], unet.config.in_channels, latent_size, latent_size), generator=generator).to(device)
 
     # Setup the latent depending if we are using the noised image or not
     if from_noised_image:
         latents = vae.encode(example["pixel_values"].to(device)).latent_dist.sample().detach()
         latents = latents * vae.config.scaling_factor
-        latents = scheduler.add_noise(latents, noise, scheduler.timesteps[:1].repeat(latents.shape[0]).to(device))
+        latents = scheduler.add_noise(latents, noise, scheduler.timesteps[:1].repeat(latents.shape[0]))
 
     else:
         latents = noise
 
-    latents = latents.to(device)
     latents = latents * scheduler.init_noise_sigma
 
     placeholder_idx = example["concept_placeholder_idx"].to(device)
