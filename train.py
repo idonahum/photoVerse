@@ -197,7 +197,7 @@ def parse_args():
     parser.add_argument(
         '--denoise_timesteps',
         type=int,
-        default=25,
+        default=10,
         help='Number of timesteps for inference'
     )
 
@@ -547,7 +547,6 @@ def main():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
-                torch.cuda.empty_cache()
 
             if accelerator.sync_gradients:
                 progress_bar.update(1)
