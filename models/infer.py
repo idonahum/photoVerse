@@ -76,18 +76,18 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
         # hidden_states = hidden_states.reshape(batch, height, width, inner_dim).permute(0, 3, 1, 2).contiguous()
         # RuntimeError: shape '[3, 1, 1, 320]' is invalid for input of size 2880
 
-        # Noise prediction based on conditional inputs (text + image)
-        noise_pred_text = unet(
-            latent_model_input,
-            t,
-            encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)
-        ).sample
-
         # Noise prediction based on unconditional inputs
         noise_pred_uncond = unet(
             latent_model_input,
             t,
             encoder_hidden_states=(uncond_embeddings, uncond_encoder_hidden_states_image)
+        ).sample.detach()
+
+        # Noise prediction based on conditional inputs (text + image)
+        noise_pred_text = unet(
+            latent_model_input,
+            t,
+            encoder_hidden_states=(encoder_hidden_states, encoder_hidden_states_image)
         ).sample
 
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
