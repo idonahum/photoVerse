@@ -582,7 +582,7 @@ def main():
                         example = {}
                         example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
                         example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
-                        del batch
+                        # del batch
                         for prompt in PROMPTS:
                             example_to_update = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
                             example.update(example_to_update)
