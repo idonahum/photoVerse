@@ -23,7 +23,7 @@ class FaceLoss(torch.nn.Module):
         else:
             return InceptionResnetV1(pretrained='vggface2')
 
-    def preprocess(self, image_tensor):
+    def preprocess(self, image_tensor, normalize=True):
         """
         Preprocess the input image tensor.
         """
@@ -31,8 +31,9 @@ class FaceLoss(torch.nn.Module):
             image_tensor = self.rgb_to_grayscale(image_tensor)
         resized_image = F.interpolate(image_tensor, size=(self.input_size, self.input_size), mode='bilinear',
                                       align_corners=False)
-        normalized_image = resized_image / 127.5 - 1
-        return normalized_image
+        if normalize:
+            resized_image = resized_image / 127.5 - 1
+        return resized_image
 
     @staticmethod
     def rgb_to_grayscale(image_tensor):
@@ -60,7 +61,7 @@ class FaceLoss(torch.nn.Module):
 
         return grayscale_image
 
-    def forward(self, x, x_gen, maximize=True, preprocess=True):
+    def forward(self, x, x_gen, maximize=True, normalize=True):
         """
         Compute cosine similarity between embeddings.
         If target
@@ -69,9 +70,8 @@ class FaceLoss(torch.nn.Module):
         if not maximize:
             target = -1 * target
 
-        if preprocess:
-            x = self.preprocess(x)
-            x_gen = self.preprocess(x_gen)
+        x = self.preprocess(x, normalize)
+        x_gen = self.preprocess(x_gen, normalize)
         embedding1 = self.model(x)
         embedding2 = self.model(x_gen)
 
