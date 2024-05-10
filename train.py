@@ -284,6 +284,16 @@ def parse_args():
 
     return args
 
+def print_gpu_memory_usage():
+    """
+    Print the current GPU memory usage using PyTorch functions.
+    """
+    # Get memory usage statistics from the default/current device
+    allocated = torch.cuda.memory_allocated() / 1024**2  # Convert to MB
+    reserved = torch.cuda.memory_reserved() / 1024**2    # Convert to MB
+
+    print(f"Allocated memory: {allocated:.2f} MB")
+    print(f"Reserved memory: {reserved:.2f} MB")
 
 def check_args(args):
     if args.extra_num_tokens < 0:
@@ -516,6 +526,8 @@ def main():
                 # Calculate loss
                 diffusion_loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
 
+                print("Before face loss")
+                print_gpu_memory_usage()
                 # Calculate face loss if needed
                 floss = torch.zeros(1, dtype=torch.float32).to(device)
 
@@ -545,10 +557,15 @@ def main():
                     accelerator.clip_grad_norm_(image_adapter.parameters(), 1)
                     accelerator.clip_grad_norm_(unet.parameters(), 1)
 
+                print("After backward")
+                print_gpu_memory_usage()
                 # Optimizer step
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+
+                print("After optimizer step")
+                print_gpu_memory_usage()
 
             if accelerator.sync_gradients:
                 progress_bar.update(1)
@@ -559,7 +576,8 @@ def main():
                     if args.use_random_prompts:
                         example = prepare_prompt(tokenizer, "a photo of {}", "*", num_of_samples=len(input_images))
                         batch.update(example)
-
+                    print("Before run_inference")
+                    print_gpu_memory_usage()
                     with torch.no_grad():
                         gen_tensors = run_inference(batch, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                     image_adapter, vae,
@@ -568,6 +586,8 @@ def main():
                                                     timesteps=10, token_index=0, disable_tqdm=True)
                     gen_images = [to_pil(denormalize(img)) for img in gen_tensors]
 
+                    print("After run_inference")
+                    print_gpu_memory_usage()
                     similarity_metric = None
                     if face_loss is not None:
                         with torch.no_grad():
