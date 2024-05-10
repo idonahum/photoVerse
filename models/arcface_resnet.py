@@ -1,5 +1,7 @@
+import torch.hub
 import torch.nn as nn
 
+from utils.arcface_utils import download_arcface_pytorch
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
@@ -124,6 +126,18 @@ class ResNetFace(nn.Module):
         x = self.bn5(x)
 
         return x
+
+
+class ArcFaceResNet18(ResNetFace):
+    def __init__(self, use_se=False, pretrained=False, **kwargs):
+        super(ArcFaceResNet18, self).__init__(IRBlock, [2, 2, 2, 2], use_se=use_se, **kwargs)
+        if pretrained:
+            model_path = torch.hub.get_dir()
+            arcface_model_path = download_arcface_pytorch(model_path)
+            # Hack to load model in DataParallel mode
+            net_out = nn.DataParallel(self)
+            net_out.load_state_dict(torch.load(arcface_model_path, map_location='cpu'))
+            self.load_state_dict(net_out.module.state_dict())
 
 
 def resnet_face18(use_se=True, **kwargs):
