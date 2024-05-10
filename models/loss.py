@@ -27,6 +27,7 @@ class FaceLoss(torch.nn.Module):
         """
         Preprocess the input image tensor.
         """
+        print(image_tensor.device)
         if self.model_name == 'arcface' and image_tensor.size(1) == 3:
             image_tensor = self.rgb_to_grayscale(image_tensor)
         resized_image = F.interpolate(image_tensor, size=(self.input_size, self.input_size), mode='bilinear',
