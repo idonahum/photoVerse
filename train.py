@@ -547,6 +547,7 @@ def main():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+                torch.cuda.empty_cache()
 
             if accelerator.sync_gradients:
                 progress_bar.update(1)
