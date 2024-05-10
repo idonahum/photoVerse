@@ -15,6 +15,7 @@ from PIL import Image
 import os
 import argparse
 
+from utils.image_utils import to_pil, denormalize
 
 # Argument parser for command-line arguments
 parser = argparse.ArgumentParser(description="Run inference with pre-trained models")
@@ -73,6 +74,7 @@ if __name__ == "__main__":
     generated_images = run_inference(
         example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler, device,
         args.encoder_layers_idx, guidance_scale=args.guidance_scale, timesteps=args.num_timesteps)
+    generated_images = [to_pil(denormalize(img)) for img in generated_images]
 
     os.makedirs(args.results_dir, exist_ok=True)
     for idx, img in enumerate(generated_images):
