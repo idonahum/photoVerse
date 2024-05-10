@@ -71,9 +71,10 @@ if __name__ == "__main__":
 
     example = preprocess_image_for_inference(args.input_image_path, tokenizer, template=args.text)
 
-    generated_images = run_inference(
-        example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler, device,
-        args.encoder_layers_idx, guidance_scale=args.guidance_scale, timesteps=args.num_timesteps)
+    with torch.no_grad():
+        generated_images = run_inference(
+            example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler, device,
+            args.encoder_layers_idx, guidance_scale=args.guidance_scale, timesteps=args.num_timesteps)
     generated_images = [to_pil(denormalize(img)) for img in generated_images]
 
     os.makedirs(args.results_dir, exist_ok=True)
