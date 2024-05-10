@@ -570,8 +570,9 @@ def main():
 
                     similarity_metric = None
                     if face_loss is not None:
-                        similarity_metric = face_loss(pixel_values, gen_tensors, normalize=False,
-                                                      maximize=False).detach().item()
+                        with torch.no_grad():
+                            similarity_metric = face_loss(pixel_values, gen_tensors, normalize=False,
+                                                          maximize=False).detach().item()
 
                     clip_images = [to_pil(denormalize_clip(img)).resize((train_dataset.size, train_dataset.size)) for
                                    img in batch["pixel_values_clip"]]
@@ -584,7 +585,7 @@ def main():
                             example = prepare_prompt(tokenizer, prompt, "*", num_of_samples=args.num_of_samples_to_save)
                             example["pixel_values_clip"] = batch["pixel_values_clip"][:args.num_of_samples_to_save]
                             example["pixel_values"] = batch["pixel_values"][:args.num_of_samples_to_save]
-
+                            del batch
                             with torch.no_grad():
                                 gen_images = run_inference(example, tokenizer, image_encoder, text_encoder, unet,
                                                            text_adapter,
@@ -592,12 +593,12 @@ def main():
                                                            noise_scheduler, device, image_encoder_layers_idx,
                                                            guidance_scale=args.guidance_scale,
                                                            timesteps=10, token_index=0,
-                                                           disable_tqdm=True)
+                                                           disable_tqdm=True).to('cpu') # offload to cpu
                             gen_images = [to_pil(denormalize(img)) for img in gen_images]
                             grid_data.append((prompt, gen_images))
                     img_grid_file = os.path.join(args.output_dir, f"{str(global_step).zfill(5)}.jpg")
                     save_images_grid(grid_data, img_grid_file)
-
+                    torch.cuda.empty_cache()
                     if args.report_to == "wandb":
                         images = wandb.Image(img_grid_file, caption="Generated images vs input images")
                         logs = {"Generated images vs input images": images}
