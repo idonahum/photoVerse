@@ -563,7 +563,7 @@ def main():
                                                     image_adapter, vae,
                                                     noise_scheduler, device, image_encoder_layers_idx,
                                                     guidance_scale=args.guidance_scale,
-                                                    timesteps=10, token_index=0, disable_tqdm=True)
+                                                    timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
                     gen_images = [to_pil(denormalize(img)) for img in gen_tensors]
 
                     similarity_metric = None
@@ -590,7 +590,7 @@ def main():
                                                            image_adapter, vae,
                                                            noise_scheduler, device, image_encoder_layers_idx,
                                                            guidance_scale=args.guidance_scale,
-                                                           timesteps=10, token_index=0,
+                                                           timesteps=args.denoise_timesteps, token_index=0,
                                                            disable_tqdm=True).to('cpu') # offload to cpu
                             gen_images = [to_pil(denormalize(img)) for img in gen_images]
                             grid_data.append((prompt, gen_images))
