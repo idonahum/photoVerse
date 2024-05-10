@@ -35,7 +35,7 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
     if from_noised_image:
         latents = vae.encode(example["pixel_values"].to(device)).latent_dist.sample().detach()
         latents = latents * vae.config.scaling_factor
-        latents = scheduler.add_noise(latents, noise, scheduler.timesteps)
+        latents = scheduler.add_noise(latents, noise, scheduler.timesteps[:1].repeat(latents.shape[0]))
 
     else:
         latents = noise
