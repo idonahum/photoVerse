@@ -26,7 +26,7 @@ def load_photoverse_model(path, image_adapter, text_adapter, unet):
     return image_adapter, text_adapter, unet, lora_config
 
 
-def save_progress(image_adapter, text_adapter, unet, accelerator, output_path, step=None, lora_config=None):
+def save_progress(image_adapter, text_adapter, unet, accelerator, output_path, step=None, lora_config=None, optimizer=None):
     state_dict_image_adapter = accelerator.unwrap_model(image_adapter).state_dict()
     state_dict_text_adapter = accelerator.unwrap_model(text_adapter).state_dict()
     state_dict_cross_attention = {}
@@ -40,6 +40,8 @@ def save_progress(image_adapter, text_adapter, unet, accelerator, output_path, s
         "text_adapter": state_dict_text_adapter,
         "cross_attention_adapter": state_dict_cross_attention
     }
+    if optimizer is not None:
+        final_state_dict["optimizer"] = optimizer.state_dict()
     if lora_config is not None:
         final_state_dict["lora_config"] = lora_config.to_dict()
     if step is not None:
