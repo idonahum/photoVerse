@@ -606,7 +606,7 @@ def main():
 
                 if global_step % args.checkpoint_save_steps == 0:
                     save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir, step=global_step,
-                                  lora_config=lora_config)
+                                  lora_config=lora_config, optimizer=optimizer)
 
             logs = {"loss_mle": diffusion_loss.detach().item(),
                     "loss_reg_concept_text": concept_text_loss.detach().item(),
@@ -624,7 +624,8 @@ def main():
         accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
-        save_progress(image_adapter, text_adapter, unet, accelerator, args)
+        save_progress(image_adapter, text_adapter, unet, accelerator, args.output_dir,
+                      lora_config=lora_config, optimizer=optimizer)
 
     accelerator.end_training()
 
