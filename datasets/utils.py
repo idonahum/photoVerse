@@ -231,13 +231,13 @@ def create_test_train_from_known_list(train_list_file, test_list_file, src_folde
 
     for img in train_list:
         src_img = os.path.join(src_folder, img)
-        dest_img = os.path.join(dest_folder, 'train', img)
+        dest_img = os.path.join(dest_folder, 'train','images', img)
         if not os.path.exists(dest_img) or force_copy:
             shutil.copy(src_img, dest_img)
 
     for img in test_list:
         src_img = os.path.join(src_folder, img)
-        dest_img = os.path.join(dest_folder, 'test', img)
+        dest_img = os.path.join(dest_folder, 'test','images', img)
         if not os.path.exists(dest_img) or force_copy:
             shutil.copy(src_img, dest_img)
 
