@@ -35,6 +35,6 @@ for TIMESTEP in "${TIMESTEPS[@]}"; do
                               --device $DEVICE \
                               --resolution $RESOLUTION \
                               --arcface_model_root_dir $ARCFACE_MODEL_ROOT_DIR \
-                              --max_gen_images 1
+                              --max_gen_images 16
     done
 done
