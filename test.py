@@ -148,10 +148,8 @@ def main():
         os.makedirs(full_output_dir, exist_ok=True)
         for batch_idx, sample in enumerate(dataloader):
             if (batch_idx + 1)*args.batch_size > args.max_gen_images:
-                print((batch_idx + 1)*args.batch_size)
                 break
             with torch.no_grad():
-                print(f"Batch: {batch_idx}")
                 pixel_values = sample["pixel_values"].to(args.device)
                 gen_tensors = run_inference(sample, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                             image_adapter, vae,
