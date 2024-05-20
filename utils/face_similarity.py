@@ -14,6 +14,7 @@ class FaceSimilarity:
         self.mtcnn = MTCNN().eval().to(device)
         self.model = self._load_model(model_name).eval().to(device)
         self.input_size = 128 if model_name == 'arcface' else 160
+        self.device = device
 
     @staticmethod
     def _load_model(model_name):
@@ -63,8 +64,8 @@ class FaceSimilarity:
         """
         Calculate cosine similarity between faces in two images.
         """
-        image1 = self.preprocess_image(image1)
-        image2 = self.preprocess_image(image2)
+        image1 = self.preprocess_image(image1).to(self.device)
+        image2 = self.preprocess_image(image2).to(self.device)
         boxes1, _ = self.mtcnn.detect(image1)
         boxes2, _ = self.mtcnn.detect(image2)
 
