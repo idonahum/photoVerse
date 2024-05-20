@@ -155,7 +155,7 @@ def main():
                                             image_adapter, vae,
                                             scheduler, args.device, image_encoder_layers_idx,
                                             guidance_scale=args.guidance_scale,
-                                            timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
+                                            timesteps=args.denoise_timesteps, token_index=0)
                 gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
                 input_images = [to_pil(denormalize(img)) for img in pixel_values]
                 grid_data = [("Input Images", input_images), ("Generated Images", gen_images)]
