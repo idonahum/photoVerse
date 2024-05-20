@@ -1,5 +1,5 @@
 import argparse
-
+import os
 import torch
 
 from datasets.custom import CustomDataset, collate_fn
@@ -109,6 +109,7 @@ def main():
     )
     image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx).to(args.device)
     similarity_list = []
+    idx = 0
     for sample in test_dataloader:
         with torch.no_grad():
             pixel_values = sample["pixel_values"].to(args.device)
@@ -121,6 +122,11 @@ def main():
                                           maximize=False).detach().item()
             similarity_list.append(similarity_metric)
             generated_images = [to_pil(denormalize(img)) for img in generated_images]
+            full_output_dir = os.path.join(args.output_dir, f"{args.denoise_timesteps}_timesteps")
+            os.makedirs(full_output_dir, exist_ok=True)
+            for img in generated_images:
+                img.save(os.path.join(full_output_dir, f"image_{idx}.png"))
+                idx += 1
     print(f"Num of timesteps: {args.denoise_timesteps}")
     print(f"Average similarity: {sum(similarity_list)/len(similarity_list)}")
 
