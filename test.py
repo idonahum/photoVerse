@@ -132,6 +132,7 @@ def main():
     text_adapter.to(args.device)
 
     for split in ["train", "test"]:
+        logging.info(f"Running on split: {split}, Model: {model_name}, Timesteps: {args.denoise_timesteps}")
         dataset = CustomDataset(data_root=os.path.join(args.data_root_path,split), img_subfolder=args.img_subfolder,
                       tokenizer=tokenizer, size=args.resolution)
         dataloader = torch.utils.data.DataLoader(
@@ -154,7 +155,7 @@ def main():
                                             image_adapter, vae,
                                             scheduler, args.device, image_encoder_layers_idx,
                                             guidance_scale=args.guidance_scale,
-                                            timesteps=args.denoise_timesteps, token_index=0)
+                                            timesteps=args.denoise_timesteps, token_index=0, disable_tqdm=True)
                 gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
                 input_images = [to_pil(denormalize(img)) for img in pixel_values]
                 grid_data = [("Input Images", input_images), ("Generated Images", gen_images)]
