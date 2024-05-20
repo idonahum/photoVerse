@@ -98,6 +98,13 @@ def main():
     tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, scheduler, _ = load_models(
         args.pretrained_model_name_or_path, args.extra_num_tokens, args.pretrained_photoverse_path)
 
+    vae.to(args.device)
+    unet.to(args.device)
+    text_encoder.to(args.device)
+    image_encoder.to(args.device)
+    image_adapter.to(args.device)
+    text_adapter.to(args.device)
+
     test_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
                   tokenizer=tokenizer, size=args.resolution)
     test_dataloader = torch.utils.data.DataLoader(
