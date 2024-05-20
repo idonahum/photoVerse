@@ -221,3 +221,31 @@ def random_batch_slicing(example, batch_size, num_of_samples):
             sliced_batch[key] = value
     return sliced_batch
 
+
+def create_test_train_from_known_list(train_list_file, test_list_file, src_folder, dest_folder, force_copy=False):
+    make_folder(dest_folder)
+    make_folder(os.path.join(dest_folder, 'train'))
+    make_folder(os.path.join(dest_folder, 'test'))
+    train_list = open(train_list_file, 'r').read().splitlines()
+    test_list = open(test_list_file, 'r').read().splitlines()
+
+    for img in train_list:
+        src_img = os.path.join(src_folder, img)
+        dest_img = os.path.join(dest_folder, 'train', img)
+        if not os.path.exists(dest_img) or force_copy:
+            shutil.copy(src_img, dest_img)
+
+    for img in test_list:
+        src_img = os.path.join(src_folder, img)
+        dest_img = os.path.join(dest_folder, 'test', img)
+        if not os.path.exists(dest_img) or force_copy:
+            shutil.copy(src_img, dest_img)
+
+    return os.path.join(dest_folder, 'train'), os.path.join(dest_folder, 'test')
+
+if __name__ == "__main__":
+    src_folder = ''
+    train_list_file = ''
+    test_list_file = ''
+    dest_folder = ''
+    create_test_train_from_known_list(train_list_file, test_list_file, src_folder, dest_folder)
