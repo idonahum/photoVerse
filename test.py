@@ -118,7 +118,7 @@ def main():
     image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx).to(args.device)
     similarity_list = []
     idx = 0
-    model_name = args.pretrained_model_name_or_path.split('/')[-1]
+    model_name = args.pretrained_photoverse_path.split('/')[-1]
     # remove the file extension
     model_name = model_name.split('.')[0]
     full_output_dir = os.path.join(args.output_dir, f"{model_name}_{args.denoise_timesteps}_timesteps")
@@ -139,6 +139,8 @@ def main():
             for img in generated_images:
                 img.save(os.path.join(full_output_dir, f"image_{idx}.png"))
                 idx += 1
+            torch.cuda.empty_cache()
+
     print(f"Num of timesteps: {args.denoise_timesteps}")
     print(f"Average similarity: {sum(similarity_list)/len(similarity_list)}")
 
