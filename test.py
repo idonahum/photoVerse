@@ -104,16 +104,19 @@ def parse_args():
     )
     return parser.parse_args()
 
-
 def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
     # Configure logging
     model_name = args.pretrained_photoverse_path.split('/')[-1]
     model_name = model_name.split('.')[0]
-    logging.basicConfig(filename=os.path.join(args.output_dir, f'{model_name}_tsp_{args.denoise_timesteps}.log'),
-                        level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
+    log_file = os.path.join(args.output_dir, f'{model_name}_tsp_{args.denoise_timesteps}.log')
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        handlers=[
+                            logging.FileHandler(log_file),
+                            logging.StreamHandler()
+                        ])
 
     logging.info(args)
     image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx).to(args.device)
