@@ -224,6 +224,8 @@ def random_batch_slicing(example, batch_size, num_of_samples):
 
 def create_test_train_from_known_list(train_list_file, test_list_file, src_folder, dest_folder, force_copy=False):
     make_folder(dest_folder)
+    make_folder(os.path.join(dest_folder, 'train'))
+    make_folder(os.path.join(dest_folder, 'test'))
     make_folder(os.path.join(dest_folder, 'train', 'images'))
     make_folder(os.path.join(dest_folder, 'test', 'images'))
     train_list = open(train_list_file, 'r').read().splitlines()
