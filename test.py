@@ -94,6 +94,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    print(args)
     face_similarity = FaceLoss(device=args.device, model_name='arcface')
     tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, scheduler, _ = load_models(
         args.pretrained_model_name_or_path, args.extra_num_tokens, args.pretrained_photoverse_path)
