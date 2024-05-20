@@ -3,17 +3,27 @@ import cv2
 from PIL import Image
 import torch
 from facenet_pytorch import MTCNN, InceptionResnetV1
-from multiprocessing import Pool
+from models.arcface_resnet import ArcFaceResNet18
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-class FacenetSimilarity:
-    def __init__(self):
-        self.mtcnn = MTCNN().eval()
-        self.model = InceptionResnetV1(pretrained='vggface2').eval()
 
-    def preprocess_image(self, image):
+class FaceSimilarity:
+    def __init__(self, model_name='arcface', device='cuda' if torch.cuda.is_available() else 'cpu'):
+        self.mtcnn = MTCNN().eval()
+        self.model = self._load_model(model_name).eval().to(device)
+        self.input_size = 128 if model_name == 'arcface' else 160
+
+    @staticmethod
+    def _load_model(model_name):
+        if model_name == 'arcface':
+            return ArcFaceResNet18(pretrained=True)
+        else:
+            return InceptionResnetV1(pretrained='vggface2')
+
+    @staticmethod
+    def preprocess_image(image):
         """
         Convert image from PIL to numpy array and convert from BGR to RGB.
         """
@@ -39,11 +49,15 @@ class FacenetSimilarity:
         
         return embedding
 
-    def cosine_similarity(self, vec1, vec2):
+    @staticmethod
+    def cosine_similarity(vec1, vec2):
         """
         Compute cosine similarity between two vectors.
         """
         return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+    def __call__(self, image1, image2):
+        return self.calculate_face_similarity(image1, image2)
 
     def calculate_face_similarity(self, image1, image2):
         """
@@ -72,7 +86,8 @@ class FacenetSimilarity:
         similarity = self.cosine_similarity(embedding1, embedding2)
         return similarity
 
-    def select_largest_bbox(self, boxes):
+    @staticmethod
+    def select_largest_bbox(boxes):
         """
         Select the largest bounding box based on area.
         """
@@ -84,7 +99,7 @@ class FacenetSimilarity:
 
 
 if __name__ == "__main__":
-    facenet_similarity = FacenetSimilarity()
+    facenet_similarity = FaceSimilarity()
 
     image_pairs = [
         ('results/2.png', 'results/2.png'),

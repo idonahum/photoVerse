@@ -2,12 +2,11 @@ import argparse
 import os
 import torch
 import logging
-from insightface.app import FaceAnalysis
 
 from datasets.custom import CustomDataset, collate_fn
 from models.infer import run_inference
 from models.modeling_utils import load_models
-from utils.arcface_utils import setup_arcface_model, cosine_similarity_between_images
+from utils.face_similarity import FaceSimilarity
 from utils.image_utils import to_pil, denormalize, save_images_grid
 
 
@@ -121,10 +120,7 @@ def main():
     logging.info(args)
     image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx).to(args.device)
 
-    setup_arcface_model(args.arcface_model_root_dir)
-    face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
-    face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
-    face_analysis_func = face_analysis.get
+    face_similarity = FaceSimilarity(model_name = 'arcface', device = args.device)
     tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, scheduler, _ = load_models(
         args.pretrained_model_name_or_path, args.extra_num_tokens, args.pretrained_photoverse_path)
 
@@ -166,7 +162,7 @@ def main():
                 save_images_grid(grid_data, img_grid_file)
 
                 for sample_idx, (gen_image, input_image) in enumerate(zip(gen_images, input_images)):
-                    similarity_list.append(cosine_similarity_between_images(gen_image, input_image, face_analysis_func))
+                    similarity_list.append(face_similarity(input_image, gen_image))
                     gen_image.save(os.path.join(full_output_dir, f"generated_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
                     input_image.save(os.path.join(full_output_dir, f"input_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
 
