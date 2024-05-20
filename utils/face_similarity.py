@@ -24,15 +24,14 @@ class FaceSimilarity:
         else:
             return InceptionResnetV1(pretrained='vggface2')
 
-    def preprocess_image(self,image):
+    @staticmethod
+    def preprocess_image(image):
         """
         Convert image from PIL to numpy array and convert from BGR to RGB.
         """
         image_np = np.array(image)
-        image = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
-        if self.model_name == 'arcface':
-            image = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-        return image
+        rgb_image = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+        return rgb_image
 
     def extract_features(self, image, box):
         """
@@ -43,7 +42,11 @@ class FaceSimilarity:
             return None
         
         # Proceed with processing the face image
-        face = cv2.resize(image[y1:y2, x1:x2], (160, 160))
+        if self.model_name == 'arcface':
+            # convert to grayscale
+            face = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        face = cv2.resize(image[y1:y2, x1:x2], (self.input_size, self.input_size))
         face = (face / 255.0 - 0.5) / 0.5
         face = np.transpose(face, (2, 0, 1))
         face = np.expand_dims(face, axis=0)
