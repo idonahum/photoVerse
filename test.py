@@ -1,11 +1,11 @@
 import argparse
 import os
 import torch
+import logging
 from insightface.app import FaceAnalysis
 
 from datasets.custom import CustomDataset, collate_fn
 from models.infer import run_inference
-from models.loss import FaceLoss
 from models.modeling_utils import load_models
 from utils.arcface_utils import setup_arcface_model, cosine_similarity_between_images
 from utils.image_utils import to_pil, denormalize, save_images_grid
@@ -33,7 +33,6 @@ def parse_args():
         required=True,
         help="Training datasets root path",
     )
-
     parser.add_argument(
         "--img_subfolder",
         type=str,
@@ -97,12 +96,27 @@ def parse_args():
         default="arcface_model",
         help="The root directory for the arcface model",
     )
+    parser.add_argument(
+        "--max_gen_images",
+        type=int,
+        default=300,
+        help="Maximum number of generated images to save",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    print(args)
+
+    # Configure logging
+    model_name = args.pretrained_photoverse_path.split('/')[-1]
+    model_name = model_name.split('.')[0]
+    logging.basicConfig(filename=os.path.join(args.output_dir, f'{model_name}_tsp_{args.denoise_timesteps}.log'),
+                        level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+    logging.info(args)
+    image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx).to(args.device)
 
     setup_arcface_model(args.arcface_model_root_dir)
     face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
@@ -118,45 +132,46 @@ def main():
     image_adapter.to(args.device)
     text_adapter.to(args.device)
 
-    test_dataset = CustomDataset(data_root=args.data_root_path, img_subfolder=args.img_subfolder,
-                  tokenizer=tokenizer, size=args.resolution)
-    test_dataloader = torch.utils.data.DataLoader(
-        test_dataset,
-        shuffle=True,
-        collate_fn=collate_fn,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-    )
-    image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx).to(args.device)
-    similarity_list = []
-    model_name = args.pretrained_photoverse_path.split('/')[-1]
-    # remove the file extension
-    model_name = model_name.split('.')[0]
-    full_output_dir = os.path.join(args.output_dir, f"{model_name}_{args.denoise_timesteps}_timesteps")
-    os.makedirs(full_output_dir, exist_ok=True)
-    for batch_idx, sample in enumerate(test_dataloader):
-        with torch.no_grad():
-            pixel_values = sample["pixel_values"].to(args.device)
-            gen_tensors = run_inference(sample, tokenizer, image_encoder, text_encoder, unet, text_adapter,
-                                        image_adapter, vae,
-                                        scheduler, args.device, image_encoder_layers_idx,
-                                        guidance_scale=args.guidance_scale,
-                                        timesteps=args.denoise_timesteps, token_index=0)
-            gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
-            input_images = [to_pil(denormalize(img)) for img in pixel_values]
-            grid_data = [("Input Images", input_images), ("Generated Images", gen_images)]
-            img_grid_file = os.path.join(full_output_dir, f"grid_{batch_idx}.jpg")
-            save_images_grid(grid_data, img_grid_file)
-            for sample_idx, (gen_image, input_image) in enumerate(zip(gen_images, input_images)):
-                similarity_list.append(cosine_similarity_between_images(gen_image, input_image, face_analysis_func))
-                gen_image.save(os.path.join(full_output_dir, f"generated_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
-                input_image.save(os.path.join(full_output_dir, f"input_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
+    for split in ["train", "test"]:
+        dataset = CustomDataset(data_root=os.path.join(args.data_root_path,split), img_subfolder=args.img_subfolder,
+                      tokenizer=tokenizer, size=args.resolution)
+        dataloader = torch.utils.data.DataLoader(
+            dataset,
+            shuffle=True,
+            collate_fn=collate_fn,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+        )
+        similarity_list = []
 
-            torch.cuda.empty_cache()
-            print(f"Current Average similarity: {sum(similarity_list) / len(similarity_list)}")
+        full_output_dir = os.path.join(args.output_dir, f"{model_name}_{args.denoise_timesteps}_timesteps", split)
+        os.makedirs(full_output_dir, exist_ok=True)
+        for batch_idx, sample in enumerate(dataloader):
+            if (batch_idx + 1)*args.batch_size > args.max_gen_images:
+                break
+            with torch.no_grad():
+                pixel_values = sample["pixel_values"].to(args.device)
+                gen_tensors = run_inference(sample, tokenizer, image_encoder, text_encoder, unet, text_adapter,
+                                            image_adapter, vae,
+                                            scheduler, args.device, image_encoder_layers_idx,
+                                            guidance_scale=args.guidance_scale,
+                                            timesteps=args.denoise_timesteps, token_index=0)
+                gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
+                input_images = [to_pil(denormalize(img)) for img in pixel_values]
+                grid_data = [("Input Images", input_images), ("Generated Images", gen_images)]
+                img_grid_file = os.path.join(full_output_dir, f"grid_{batch_idx}.jpg")
+                save_images_grid(grid_data, img_grid_file)
 
-    print(f"Num of timesteps: {args.denoise_timesteps}")
-    print(f"Final similarity: {sum(similarity_list)/len(similarity_list)}")
+                for sample_idx, (gen_image, input_image) in enumerate(zip(gen_images, input_images)):
+                    similarity_list.append(cosine_similarity_between_images(gen_image, input_image, face_analysis_func))
+                    gen_image.save(os.path.join(full_output_dir, f"generated_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
+                    input_image.save(os.path.join(full_output_dir, f"input_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
+
+                torch.cuda.empty_cache()
+                logging.info(f"Current Average similarity: {sum(similarity_list) / len(similarity_list)}, Split type: {split}, Model: {model_name}, Timesteps: {args.denoise_timesteps}")
+
+    logging.info(f"Final similarity: {sum(similarity_list)/len(similarity_list)}, Split type: {split}, Model: {model_name}, Timesteps: {args.denoise_timesteps}")
+
 
 if __name__ == "__main__":
     main()
