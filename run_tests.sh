@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export TF_FORCE_GPU_ALLOW_GROWTH=true
+export TF_CPP_MIN_LOG_LEVEL=2
 # Define paths
 MODEL1_PATH="photoverse_058000.pt"
 MODEL2_PATH="photoverse_arcface_042000.pt"
@@ -16,6 +18,7 @@ GUIDANCE_SCALE=2.0
 DEVICE="cuda"  # or "cpu"
 RESOLUTION=512
 ARCFACE_MODEL_ROOT_DIR="arcface_model"
+MAX_GEN_IMAGES=300
 
 # Define timesteps
 TIMESTEPS=(10 25 50 100)
@@ -35,6 +38,6 @@ for TIMESTEP in "${TIMESTEPS[@]}"; do
                               --device $DEVICE \
                               --resolution $RESOLUTION \
                               --arcface_model_root_dir $ARCFACE_MODEL_ROOT_DIR \
-                              --max_gen_images 16
+                              --max_gen_images $MAX_GEN_IMAGES
     done
 done
