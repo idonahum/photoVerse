@@ -1,12 +1,14 @@
 import argparse
 import os
 import torch
+from insightface.app import FaceAnalysis
 
 from datasets.custom import CustomDataset, collate_fn
 from models.infer import run_inference
 from models.loss import FaceLoss
 from models.modeling_utils import load_models
-from utils.image_utils import to_pil, denormalize
+from utils.arcface_utils import setup_arcface_model, cosine_similarity_between_images
+from utils.image_utils import to_pil, denormalize, save_images_grid
 
 
 def parse_args():
@@ -89,13 +91,23 @@ def parse_args():
             "The resolution for input images"
         ),
     )
+    parser.add_argument(
+        "--arcface_model_root_dir",
+        type=str,
+        default="arcface_model",
+        help="The root directory for the arcface model",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     print(args)
-    face_similarity = FaceLoss(device=args.device, model_name='arcface')
+
+    setup_arcface_model(args.arcface_model_root_dir)
+    face_analysis = FaceAnalysis(name='antelopev2', root=args.arcface_model_root_dir)
+    face_analysis.prepare(ctx_id=0, det_size=(args.resolution, args.resolution))
+    face_analysis_func = face_analysis.get
     tokenizer, text_encoder, vae, unet, image_encoder, image_adapter, text_adapter, scheduler, _ = load_models(
         args.pretrained_model_name_or_path, args.extra_num_tokens, args.pretrained_photoverse_path)
 
@@ -117,13 +129,12 @@ def main():
     )
     image_encoder_layers_idx = torch.tensor(args.image_encoder_layers_idx).to(args.device)
     similarity_list = []
-    idx = 0
     model_name = args.pretrained_photoverse_path.split('/')[-1]
     # remove the file extension
     model_name = model_name.split('.')[0]
     full_output_dir = os.path.join(args.output_dir, f"{model_name}_{args.denoise_timesteps}_timesteps")
     os.makedirs(full_output_dir, exist_ok=True)
-    for sample in test_dataloader:
+    for batch_idx, sample in enumerate(test_dataloader):
         with torch.no_grad():
             pixel_values = sample["pixel_values"].to(args.device)
             gen_tensors = run_inference(sample, tokenizer, image_encoder, text_encoder, unet, text_adapter,
@@ -131,14 +142,21 @@ def main():
                                         scheduler, args.device, image_encoder_layers_idx,
                                         guidance_scale=args.guidance_scale,
                                         timesteps=args.denoise_timesteps, token_index=0)
-            similarity_metric = face_similarity(pixel_values, gen_tensors, normalize=False,
-                                          maximize=False).detach().item()
-            similarity_list.append(similarity_metric)
+            gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
+            input_images = [to_pil(denormalize(img)) for img in pixel_values]
+            grid_data = [("Input Images", input_images), ("Generated Images", gen_images)]
+            img_grid_file = os.path.join(full_output_dir, f"grid_{batch_idx}.jpg")
+            save_images_grid(grid_data, img_grid_file)
+            for sample_idx, (gen_image, input_image) in enumerate(zip(gen_images, input_images)):
+                similarity_list.append(cosine_similarity_between_images(gen_image, input_image, face_analysis_func))
+                gen_image.save(os.path.join(full_output_dir, f"generated_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
+                input_image.save(os.path.join(full_output_dir, f"input_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
+
             torch.cuda.empty_cache()
-            print(f"Average similarity: {sum(similarity_list) / len(similarity_list)}")
+            print(f"Current Average similarity: {sum(similarity_list) / len(similarity_list)}")
 
     print(f"Num of timesteps: {args.denoise_timesteps}")
-    print(f"Average similarity: {sum(similarity_list)/len(similarity_list)}")
+    print(f"Final similarity: {sum(similarity_list)/len(similarity_list)}")
 
 if __name__ == "__main__":
     main()
