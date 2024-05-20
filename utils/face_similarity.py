@@ -15,6 +15,7 @@ class FaceSimilarity:
         self.model = self._load_model(model_name).eval().to(device)
         self.input_size = 128 if model_name == 'arcface' else 160
         self.device = device
+        self.model_name = model_name
 
     @staticmethod
     def _load_model(model_name):
@@ -23,14 +24,15 @@ class FaceSimilarity:
         else:
             return InceptionResnetV1(pretrained='vggface2')
 
-    @staticmethod
-    def preprocess_image(image):
+    def preprocess_image(self,image):
         """
         Convert image from PIL to numpy array and convert from BGR to RGB.
         """
         image_np = np.array(image)
-        rgb_image = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
-        return rgb_image
+        image = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+        if self.model_name == 'arcface':
+            image = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+        return image
 
     def extract_features(self, image, box):
         """
