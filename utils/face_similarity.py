@@ -44,7 +44,7 @@ class FaceSimilarity:
         # Proceed with processing the face image
         if self.model_name == 'arcface':
             # convert to grayscale
-            face = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         face = cv2.resize(image[y1:y2, x1:x2], (self.input_size, self.input_size))
         face = (face / 255.0 - 0.5) / 0.5
