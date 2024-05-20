@@ -170,7 +170,7 @@ def main():
                 torch.cuda.empty_cache()
                 logging.info(f"Current Average similarity: {sum(similarity_list) / len(similarity_list)}, Split type: {split}, Model: {model_name}, Timesteps: {args.denoise_timesteps}")
 
-    logging.info(f"Final similarity: {sum(similarity_list)/len(similarity_list)}, Split type: {split}, Model: {model_name}, Timesteps: {args.denoise_timesteps}")
+        logging.info(f"Final similarity: {sum(similarity_list)/len(similarity_list)}, Split type: {split}, Model: {model_name}, Timesteps: {args.denoise_timesteps}")
 
 
 if __name__ == "__main__":
