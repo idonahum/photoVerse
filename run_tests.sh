@@ -1,21 +1,19 @@
 #!/bin/bash
 
 # Define paths
-MODEL1_PATH="path/to/model1"
-MODEL2_PATH="path/to/model2"
-MODEL3_PATH="path/to/model3"
+MODEL1_PATH="photoverse_058000.pt"
+MODEL2_PATH="photoverse_arcface_042000.pt"
+MODEL3_PATH="photoverse_facenet_074000.pt"
 
 # Define other common arguments
 PRETRAINED_MODEL_NAME="runwayml/stable-diffusion-v1-5"
-DATA_ROOT_PATH="path/to/data_root"
+DATA_ROOT_PATH="train_test_from_file"
 IMG_SUBFOLDER="images"
 OUTPUT_DIR="results"
 BATCH_SIZE=16
 NUM_WORKERS=4
 GUIDANCE_SCALE=2.0
 DEVICE="cuda"  # or "cpu"
-EXTRA_NUM_TOKENS=4
-IMAGE_ENCODER_LAYERS_IDX="[4, 8, 12, 16]"
 RESOLUTION=512
 ARCFACE_MODEL_ROOT_DIR="arcface_model"
 
@@ -35,8 +33,6 @@ for TIMESTEP in "${TIMESTEPS[@]}"; do
                               --denoise_timesteps $TIMESTEP \
                               --guidance_scale $GUIDANCE_SCALE \
                               --device $DEVICE \
-                              --extra_num_tokens $EXTRA_NUM_TOKENS \
-                              --image_encoder_layers_idx $IMAGE_ENCODER_LAYERS_IDX \
                               --resolution $RESOLUTION \
                               --arcface_model_root_dir $ARCFACE_MODEL_ROOT_DIR \
                               --max_gen_images 1
