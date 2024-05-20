@@ -66,8 +66,8 @@ class FaceSimilarity:
         """
         image1 = self.preprocess_image(image1)
         image2 = self.preprocess_image(image2)
-        boxes1, _ = self.mtcnn.detect(torch.tensor(image1).to(self.device))
-        boxes2, _ = self.mtcnn.detect(torch.tensor(image2).to(self.device))
+        boxes1, _ = self.mtcnn.detect(image1)
+        boxes2, _ = self.mtcnn.detect(image2)
 
         # If either image is not recognized, return similarity score of 0
         if boxes1 is None or boxes2 is None \
