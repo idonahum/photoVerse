@@ -43,18 +43,16 @@ class FaceSimilarity:
         
         # Proceed with processing the face image
         if self.model_name == 'arcface':
-            # convert to grayscale
             image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
             face = cv2.resize(image[y1:y2, x1:x2], (self.input_size, self.input_size))
             face = np.expand_dims(face, axis=-1)
         else:
             face = cv2.resize(image[y1:y2, x1:x2], (self.input_size, self.input_size))
         face = (face / 255.0 - 0.5) / 0.5
-        print(face.shape)
         face = np.transpose(face, (2, 0, 1))
         face = np.expand_dims(face, axis=0)
         with torch.no_grad():
-            embedding = self.model(torch.tensor(face).float().to(self.device)).squeeze().numpy()
+            embedding = self.model(torch.tensor(face).float().to(self.device)).squeeze().cpu().numpy()
         
         return embedding
 
