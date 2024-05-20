@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class FaceSimilarity:
     def __init__(self, model_name='arcface', device='cuda' if torch.cuda.is_available() else 'cpu'):
-        self.mtcnn = MTCNN().eval()
+        self.mtcnn = MTCNN().eval().to(device)
         self.model = self._load_model(model_name).eval().to(device)
         self.input_size = 128 if model_name == 'arcface' else 160
 
