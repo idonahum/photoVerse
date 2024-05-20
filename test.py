@@ -107,7 +107,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    os.makedirs(args.output_dir, exist_ok=True)
     # Configure logging
     model_name = args.pretrained_photoverse_path.split('/')[-1]
     model_name = model_name.split('.')[0]
