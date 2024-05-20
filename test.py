@@ -137,7 +137,7 @@ def main():
                       tokenizer=tokenizer, size=args.resolution)
         dataloader = torch.utils.data.DataLoader(
             dataset,
-            shuffle=True,
+            shuffle=False,
             collate_fn=collate_fn,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
