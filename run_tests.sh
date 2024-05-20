@@ -25,7 +25,7 @@ TIMESTEPS=(10 25 50 100)
 # Run the script for each model and each timestep
 for TIMESTEP in "${TIMESTEPS[@]}"; do
     for MODEL_PATH in "$MODEL1_PATH" "$MODEL2_PATH" "$MODEL3_PATH"; do
-        python main_script.py --pretrained_model_name_or_path $PRETRAINED_MODEL_NAME \
+        python test.py --pretrained_model_name_or_path $PRETRAINED_MODEL_NAME \
                               --pretrained_photoverse_path $MODEL_PATH \
                               --data_root_path $DATA_ROOT_PATH \
                               --img_subfolder $IMG_SUBFOLDER \
@@ -38,6 +38,7 @@ for TIMESTEP in "${TIMESTEPS[@]}"; do
                               --extra_num_tokens $EXTRA_NUM_TOKENS \
                               --image_encoder_layers_idx $IMAGE_ENCODER_LAYERS_IDX \
                               --resolution $RESOLUTION \
-                              --arcface_model_root_dir $ARCFACE_MODEL_ROOT_DIR
+                              --arcface_model_root_dir $ARCFACE_MODEL_ROOT_DIR \
+                              --max_gen_images 1
     done
 done
