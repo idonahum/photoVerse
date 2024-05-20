@@ -134,7 +134,7 @@ def main():
             similarity_metric = face_similarity(pixel_values, gen_tensors, normalize=False,
                                           maximize=False).detach().item()
             similarity_list.append(similarity_metric)
-            generated_images = [to_pil(denormalize(img)) for img in generated_images]
+            generated_images = [to_pil(denormalize(img)) for img in gen_tensors]
 
             for img in generated_images:
                 img.save(os.path.join(full_output_dir, f"image_{idx}.png"))
