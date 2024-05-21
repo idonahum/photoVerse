@@ -1,9 +1,7 @@
 #!/bin/bash
 
 # Define paths
-MODEL1_PATH="photoverse_058000.pt"
-MODEL2_PATH="photoverse_arcface_042000.pt"
-MODEL3_PATH="photoverse_facenet_074000.pt"
+MODEL_PATH="photoverse_facenet_074000.pt"
 
 # Define other common arguments
 PRETRAINED_MODEL_NAME="runwayml/stable-diffusion-v1-5"
@@ -22,17 +20,15 @@ DENOISE_TIMESTEPS=25  # Update if you want to run for multiple timesteps
 mkdir -p $OUTPUT_DIR
 
 # Run the script for each model
-for MODEL_PATH in "$MODEL1_PATH" "$MODEL2_PATH" "$MODEL3_PATH"; do
-    python test_prompts.py --pretrained_model_name_or_path $PRETRAINED_MODEL_NAME \
-                          --pretrained_photoverse_path $MODEL_PATH \
-                          --data_root_path $DATA_ROOT_PATH \
-                          --img_subfolder $IMG_SUBFOLDER \
-                          --output_dir $OUTPUT_DIR \
-                          --batch_size $BATCH_SIZE \
-                          --num_workers $NUM_WORKERS \
-                          --denoise_timesteps $DENOISE_TIMESTEPS \
-                          --guidance_scale $GUIDANCE_SCALE \
-                          --device $DEVICE \
-                          --resolution $RESOLUTION \
-                          --max_gen_images $MAX_GEN_IMAGES
-done
+python test_prompts.py --pretrained_model_name_or_path $PRETRAINED_MODEL_NAME \
+                      --pretrained_photoverse_path $MODEL_PATH \
+                      --data_root_path $DATA_ROOT_PATH \
+                      --img_subfolder $IMG_SUBFOLDER \
+                      --output_dir $OUTPUT_DIR \
+                      --batch_size $BATCH_SIZE \
+                      --num_workers $NUM_WORKERS \
+                      --denoise_timesteps $DENOISE_TIMESTEPS \
+                      --guidance_scale $GUIDANCE_SCALE \
+                      --device $DEVICE \
+                      --resolution $RESOLUTION \
+                      --max_gen_images $MAX_GEN_IMAGES

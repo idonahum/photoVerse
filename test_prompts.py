@@ -10,15 +10,23 @@ from models.modeling_utils import load_models
 from utils.image_utils import to_pil, denormalize, save_images_grid
 
 PROMPTS = ['A photo of {}',
-        '{} in Ghibli anime style',
-           '{} in Disney & Pixar style',
+           '{} in Ghilbi anime style',
+           '{} in Disney/Pixar style',
            '{} wears a red hat',
            '{} on the beach',
            'Manga drawing of {}',
-           '{} Funko Pop',
-           '{} latte art', ]
+           '{} as a Funko Pop figure',
+            'Latte art of {}',
+            '{} flower arrangement',
+           'Pointillism painting of {}',
+           '{} stained glass window',
+           '{} is camping in the mountains',
+           '{} is a character in a video game',
+           'Watercolor painting of {}',
+           '{} as a knight in plate',
+           '{} as a character in a comic book']
 
-PROMPTS_NAMES = ['photo','ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art']
+PROMPTS_NAMES = ['photo','ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art', 'flower_arrangement', 'pointillism', 'stained_glass', 'camping', 'video_game', 'watercolor', 'knight', 'comic_book']
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -144,6 +152,9 @@ def main():
                 pixel_values = sample["pixel_values"].to(args.device)
                 input_images = [to_pil(denormalize(img)) for img in pixel_values]
                 grid_data = [("Input Images", input_images)]
+                for row_idx, input_image in enumerate(input_images):
+                    os.makedirs(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{row_idx}"), exist_ok=True)
+                    input_image.save(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{row_idx}", "input_image.png"))
                 for prompt, prompt_name in zip(PROMPTS, PROMPTS_NAMES):
                     sample_to_update = prepare_prompt(tokenizer, prompt, "*",
                                                        num_of_samples=len(pixel_values))
@@ -154,9 +165,8 @@ def main():
                                                 guidance_scale=args.guidance_scale,
                                                 timesteps=args.denoise_timesteps, token_index=0)
                     gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
-                    for sample_idx, (gen_image, input_image) in enumerate(zip(gen_images, input_images)):
-                        gen_image.save(os.path.join(full_output_dir,
-                                                    f"generated_{prompt_name}_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
+                    for sample_idx, gen_image in enumerate(gen_images):
+                        gen_image.save(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{sample_idx}", f"{prompt_name}.png"))
                     grid_data.append((sample['text'][0], gen_images))
                     torch.cuda.empty_cache()
 
