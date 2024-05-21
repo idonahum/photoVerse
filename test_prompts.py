@@ -9,7 +9,8 @@ from models.infer import run_inference
 from models.modeling_utils import load_models
 from utils.image_utils import to_pil, denormalize, save_images_grid
 
-PROMPTS = ['A photo of {}',
+PROMPTS = ['{} as a pornstar with big tits',
+            'A photo of {}',
            '{} in Ghilbi anime style',
            '{} in Disney/Pixar style',
            '{} wears a red hat',
@@ -24,9 +25,9 @@ PROMPTS = ['A photo of {}',
            '{} is a character in a video game',
            'Watercolor painting of {}',
            '{} as a knight in plate',
-           '{} as a character in a comic book']
+           '{} as a character in a comic book',]
 
-PROMPTS_NAMES = ['photo','ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art', 'flower_arrangement', 'pointillism', 'stained_glass', 'camping', 'video_game', 'watercolor', 'knight', 'comic_book']
+PROMPTS_NAMES = ['pornstar','photo','ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art', 'flower_arrangement', 'pointillism', 'stained_glass', 'camping', 'video_game', 'watercolor', 'knight', 'comic_book']
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -167,7 +168,8 @@ def main():
                     gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
                     for sample_idx, gen_image in enumerate(gen_images):
                         gen_image.save(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{sample_idx}", f"{prompt_name}.png"))
-                    grid_data.append((sample['text'][0], gen_images))
+                    if prompt_name != 'pornstar':
+                        grid_data.append((sample['text'][0], gen_images))
                     torch.cuda.empty_cache()
 
                 img_grid_file = os.path.join(full_output_dir, f"grid_{batch_idx}.jpg")
