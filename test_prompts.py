@@ -146,7 +146,7 @@ def main():
                 grid_data = [("Input Images", input_images)]
                 for prompt, prompt_name in zip(PROMPTS, PROMPTS_NAMES):
                     sample_to_update = prepare_prompt(tokenizer, prompt, "*",
-                                                       num_of_samples=args.num_of_samples_to_save)
+                                                       num_of_samples=len(pixel_values))
                     sample.update(sample_to_update)
                     gen_tensors = run_inference(sample, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                 image_adapter, vae,
