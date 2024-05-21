@@ -168,8 +168,7 @@ def main():
                     gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
                     for sample_idx, gen_image in enumerate(gen_images):
                         gen_image.save(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{sample_idx}", f"{prompt_name}.png"))
-                    if prompt_name != 'pornstar':
-                        grid_data.append((sample['text'][0], gen_images))
+                    grid_data.append((sample['text'][0], gen_images))
                     torch.cuda.empty_cache()
 
                 img_grid_file = os.path.join(full_output_dir, f"grid_{batch_idx}.jpg")
