@@ -14,12 +14,13 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
     scheduler.set_timesteps(timesteps)
 
     # Create the unconditional input ids
-    uncond_input = tokenizer(
+    uncond_input_ids = example.get("negative_text_input_ids", None)
+    uncond_input_ids = tokenizer(
         [''] * example["pixel_values"].shape[0],
         padding="max_length",
         max_length=tokenizer.model_max_length,
         return_tensors="pt",
-    )
+    ).input_ids if uncond_input_ids is None else uncond_input_ids
 
     # Create the noise
     if seed is None:
@@ -63,7 +64,7 @@ def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_ad
     encoder_hidden_states_image = image_adapter(image_embeddings, token_index=token_index)
     uncond_encoder_hidden_states_image = image_adapter(uncond_image_emmbedings, token_index=token_index)
 
-    uncond_embeddings = text_encoder({'text_input_ids': uncond_input.input_ids.to(device)})[0]
+    uncond_embeddings = text_encoder({'text_input_ids': uncond_input_ids.to(device)})[0]
     encoder_hidden_states = text_encoder({'text_input_ids': example["text_input_ids"].to(device),
                                           "concept_text_embeddings": concept_text_embeddings,
                                           "concept_placeholder_idx": placeholder_idx})[0]

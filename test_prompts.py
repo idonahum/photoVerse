@@ -9,25 +9,31 @@ from models.infer import run_inference
 from models.modeling_utils import load_models
 from utils.image_utils import to_pil, denormalize, save_images_grid
 
-PROMPTS = ['{} as a pornstar with big tits',
-            'A photo of {}',
-           '{} in Ghilbi anime style',
-           '{} in Disney/Pixar style',
-           '{} wears a red hat',
-           '{} on the beach',
-           'Manga drawing of {}',
-           '{} as a Funko Pop figure',
-            'Latte art of {}',
-            '{} flower arrangement',
-           'Pointillism painting of {}',
-           '{} stained glass window',
-           '{} is camping in the mountains',
-           '{} is a character in a video game',
-           'Watercolor painting of {}',
-           '{} as a knight in plate',
-           '{} as a character in a comic book',]
+PROMPTS = [
+    ('{} as a pornstar with big tits', 'no blur, no low resolution, avoid overly explicit details'),
+    ('A photo of {}', 'no painting, no drawing, no illustration, no cartoon'),
+    ('{} in Ghibli anime style', 'no realism, no photographic details, no blur'),
+    ('{} in Disney/Pixar style', 'no realism, avoid photographic details, no blur, no dark shadows, no low resolution'),
+    ('{} wears a red hat', 'no blur, no low resolution, avoid overly detailed backgrounds'),
+    ('{} on the beach', 'no blur, no low resolution, avoid overly complex backgrounds'),
+    ('Manga drawing of {}', 'no realism, no photographic details, no blur, no color, no 3D rendering'),
+    ('{} as a Funko Pop figure', 'no realism, no photographic details, no blur, avoid detailed textures'),
+    ('Latte art of {}', 'no realism, no photographic details, no blur, no vibrant colors, no 3D rendering'),
+    ('{} flower arrangement', 'no blur, no low resolution, avoid overly complex backgrounds'),
+    ('Pointillism painting of {}', 'no blur, no low resolution, avoid overly detailed textures'),
+    ('{} stained glass window', 'no blur, no low resolution, avoid overly complex designs'),
+    ('{} is camping in the mountains', 'no blur, no low resolution, avoid overly complex backgrounds'),
+    (
+    '{} is a character in a video game', 'no realism, no photographic details, no blur, avoid overly complex textures'),
+    ('Watercolor painting of {}', 'no blur, no low resolution, avoid overly complex textures'),
+    ('{} as a knight in plate', 'no blur, no low resolution, avoid overly complex backgrounds'),
+    ('{} as a character in a comic book', 'no realism, no photographic details, no blur, avoid overly complex textures')
+]
 
-PROMPTS_NAMES = ['pornstar','photo','ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art', 'flower_arrangement', 'pointillism', 'stained_glass', 'camping', 'video_game', 'watercolor', 'knight', 'comic_book']
+PROMPTS_NAMES = ['pornstar', 'photo', 'ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art',
+                 'flower_arrangement', 'pointillism', 'stained_glass', 'camping', 'video_game', 'watercolor', 'knight',
+                 'comic_book']
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -116,6 +122,7 @@ def parse_args():
     )
     return parser.parse_args()
 
+
 def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -134,8 +141,8 @@ def main():
     text_adapter.to(args.device)
 
     for split in ["train", "test"]:
-        dataset = CustomDataset(data_root=os.path.join(args.data_root_path,split), img_subfolder=args.img_subfolder,
-                      tokenizer=tokenizer, size=args.resolution)
+        dataset = CustomDataset(data_root=os.path.join(args.data_root_path, split), img_subfolder=args.img_subfolder,
+                                tokenizer=tokenizer, size=args.resolution)
         dataloader = torch.utils.data.DataLoader(
             dataset,
             shuffle=True,
@@ -147,7 +154,7 @@ def main():
         full_output_dir = os.path.join(args.output_dir, f"{model_name}_{args.denoise_timesteps}_timesteps", split)
         os.makedirs(full_output_dir, exist_ok=True)
         for batch_idx, sample in enumerate(dataloader):
-            if (batch_idx + 1)*args.batch_size > args.max_gen_images:
+            if (batch_idx + 1) * args.batch_size > args.max_gen_images:
                 break
             with torch.no_grad():
                 pixel_values = sample["pixel_values"].to(args.device)
@@ -155,10 +162,11 @@ def main():
                 grid_data = [("Input Images", input_images)]
                 for row_idx, input_image in enumerate(input_images):
                     os.makedirs(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{row_idx}"), exist_ok=True)
-                    input_image.save(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{row_idx}", "input_image.png"))
-                for prompt, prompt_name in zip(PROMPTS, PROMPTS_NAMES):
-                    sample_to_update = prepare_prompt(tokenizer, prompt, "*",
-                                                       num_of_samples=len(pixel_values))
+                    input_image.save(
+                        os.path.join(full_output_dir, f"grid_{batch_idx}_row_{row_idx}", "input_image.png"))
+                for (prompt, negative_prompt), prompt_name in zip(PROMPTS, PROMPTS_NAMES):
+                    sample_to_update = prepare_prompt(tokenizer, prompt, "*", negative_prompt=negative_prompt,
+                                                      num_of_samples=len(pixel_values))
                     sample.update(sample_to_update)
                     gen_tensors = run_inference(sample, tokenizer, image_encoder, text_encoder, unet, text_adapter,
                                                 image_adapter, vae,
@@ -167,14 +175,13 @@ def main():
                                                 timesteps=args.denoise_timesteps, token_index=0)
                     gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
                     for sample_idx, gen_image in enumerate(gen_images):
-                        gen_image.save(os.path.join(full_output_dir, f"grid_{batch_idx}_row_{sample_idx}", f"{prompt_name}.png"))
+                        gen_image.save(
+                            os.path.join(full_output_dir, f"grid_{batch_idx}_row_{sample_idx}", f"{prompt_name}.png"))
                     grid_data.append((sample['text'][0], gen_images))
                     torch.cuda.empty_cache()
 
                 img_grid_file = os.path.join(full_output_dir, f"grid_{batch_idx}.jpg")
                 save_images_grid(grid_data, img_grid_file)
-
-
 
 
 if __name__ == "__main__":
