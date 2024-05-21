@@ -158,11 +158,12 @@ def main():
                         gen_image.save(os.path.join(full_output_dir,
                                                     f"generated_{prompt_name}_img_batch_idx{batch_idx}_sample_idx{sample_idx}.png"))
                     grid_data.append((sample['text'][0], gen_images))
+                    torch.cuda.empty_cache()
 
                 img_grid_file = os.path.join(full_output_dir, f"grid_{batch_idx}.jpg")
                 save_images_grid(grid_data, img_grid_file)
 
-                torch.cuda.empty_cache()
+
 
 
 if __name__ == "__main__":
