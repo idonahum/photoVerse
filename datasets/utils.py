@@ -157,7 +157,7 @@ def preprocess_image(raw_image, size=512, interpolation="bicubic"):
     return transform(raw_image)
 
 
-def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*", num_of_samples=None):
+def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*", negative_prompt=None, num_of_samples=None):
     """
     Prepare prompt text and its input IDs.
 
@@ -179,12 +179,24 @@ def prepare_prompt(tokenizer, template="a photo of a {}", placeholder_token="*",
         max_length=tokenizer.model_max_length,
         return_tensors="pt",
     ).input_ids
+
+    negative_input_ids = None
+    if negative_prompt:
+        negative_input_ids = tokenizer(
+            negative_prompt,
+            padding="max_length",
+            truncation=True,
+            max_length=tokenizer.model_max_length,
+            return_tensors="pt",
+        ).input_ids
     concept_placeholder_idx = torch.tensor([_find_placeholder_index(text, placeholder_token)])
     if num_of_samples:
         text = [text] * num_of_samples
         input_ids = input_ids.repeat(num_of_samples, 1)
         concept_placeholder_idx = concept_placeholder_idx.repeat(num_of_samples, 1)
-    return {'text': text, 'text_input_ids': input_ids, 'concept_placeholder_idx': concept_placeholder_idx}
+        if negative_input_ids is not None:
+            negative_input_ids = negative_input_ids.repeat(num_of_samples, 1)
+    return {'text': text, 'text_input_ids': input_ids, 'concept_placeholder_idx': concept_placeholder_idx, 'negative_text_input_ids': negative_input_ids}
 
 
 def get_torch_interpolation(interpolation):
@@ -221,3 +233,29 @@ def random_batch_slicing(example, batch_size, num_of_samples):
             sliced_batch[key] = value
     return sliced_batch
 
+
+def create_test_train_from_known_list(train_list_file, test_list_file, src_folder, dest_folder, force_copy=False):
+    _create_spilliting_folders(dest_folder)
+    train_list = open(train_list_file, 'r').read().splitlines()
+    test_list = open(test_list_file, 'r').read().splitlines()
+
+    for img in train_list:
+        src_img = os.path.join(src_folder, img)
+        dest_img = os.path.join(dest_folder, 'train', 'images', img)
+        if not os.path.exists(dest_img) or force_copy:
+            shutil.copy(src_img, dest_img)
+
+    for img in test_list:
+        src_img = os.path.join(src_folder, img)
+        dest_img = os.path.join(dest_folder, 'test','images', img)
+        if not os.path.exists(dest_img) or force_copy:
+            shutil.copy(src_img, dest_img)
+
+    return os.path.join(dest_folder, 'train'), os.path.join(dest_folder, 'test')
+
+if __name__ == "__main__":
+    src_folder = ''
+    train_list_file = ''
+    test_list_file = ''
+    dest_folder = ''
+    create_test_train_from_known_list(train_list_file, test_list_file, src_folder, dest_folder)
