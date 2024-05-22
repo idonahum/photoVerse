@@ -10,7 +10,6 @@ from models.modeling_utils import load_models
 from utils.image_utils import to_pil, denormalize, save_images_grid
 
 PROMPTS = [
-    ('{} as a pornstar with big tits', 'no blur, no low resolution, avoid overly explicit details'),
     ('A photo of {}', 'no painting, no drawing, no illustration, no cartoon'),
     ('{} in Ghibli anime style', 'no realism, no photographic details, no blur'),
     ('{} in Disney/Pixar style', 'no realism, avoid photographic details, no blur, no dark shadows, no low resolution'),
@@ -30,7 +29,7 @@ PROMPTS = [
     ('{} as a character in a comic book', 'no realism, no photographic details, no blur, avoid overly complex textures')
 ]
 
-PROMPTS_NAMES = ['pornstar', 'photo', 'ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art',
+PROMPTS_NAMES = ['photo', 'ghibli', 'disney_pixar', 'red_hat', 'beach', 'manga', 'funko_pop', 'latte_art',
                  'flower_arrangement', 'pointillism', 'stained_glass', 'camping', 'video_game', 'watercolor', 'knight',
                  'comic_book']
 
