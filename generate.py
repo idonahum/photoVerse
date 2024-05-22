@@ -29,6 +29,7 @@ parser.add_argument("--output_image_path", type=str, default="generated_image", 
 parser.add_argument("--num_timesteps", type=int, default=25, help="Number of timesteps for inference")
 parser.add_argument("--results_dir", type=str, default="results", help="Directory to save the generated images")
 parser.add_argument("--text", type=str, default="a photo of a {}", help="Prompt template for image generation")
+parser.add_argument("--negative_prompt", type=str, default=None, help="Prompt template for negative images")
 
 
 def preprocess_image_for_inference(image_path, tokenizer, template="a photo of a {}", placeholder_token="*", size=512, interpolation="bicubic"):
