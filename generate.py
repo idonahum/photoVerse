@@ -31,6 +31,7 @@ parser.add_argument("--results_dir", type=str, default="results", help="Director
 parser.add_argument("--text", type=str, default="a photo of a {}", help="Prompt template for image generation")
 parser.add_argument("--negative_prompt", type=str, default=None, help="Prompt template for negative images")
 parser.add_argument("--num_of_samples", type=int, default=None, help="Number of samples to generate")
+parser.add_argument("--from_noised_image", action="store_true", help="Use noised image as input")
 
 
 def preprocess_image_for_inference(image_path, tokenizer, template="a photo of a {}",
@@ -81,7 +82,7 @@ if __name__ == "__main__":
     with torch.no_grad():
         generated_images = run_inference(
             example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler, device,
-            args.encoder_layers_idx, guidance_scale=args.guidance_scale, timesteps=args.num_timesteps)
+            args.encoder_layers_idx, guidance_scale=args.guidance_scale, timesteps=args.num_timesteps, from_noised_image=args.from_noised_image)
     generated_images = [to_pil(denormalize(img)) for img in generated_images]
 
     os.makedirs(args.results_dir, exist_ok=True)
