@@ -32,7 +32,7 @@ parser.add_argument("--text", type=str, default="a photo of a {}", help="Prompt 
 parser.add_argument("--negative_prompt", type=str, default=None, help="Prompt template for negative images")
 
 
-def preprocess_image_for_inference(image_path, tokenizer, template="a photo of a {}", placeholder_token="*", size=512, interpolation="bicubic"):
+def preprocess_image_for_inference(image_path, tokenizer, template="a photo of a {}", placeholder_token="*",negative_prompt=None, size=512, interpolation="bicubic"):
     """Preprocess an image for inference.
 
     Args:
@@ -49,7 +49,7 @@ def preprocess_image_for_inference(image_path, tokenizer, template="a photo of a
     raw_image = Image.open(image_path)
     if (raw_image.mode != "RGB"):
         raw_image = raw_image.convert("RGB")
-    example = prepare_prompt(tokenizer, template, placeholder_token)
+    example = prepare_prompt(tokenizer, template, placeholder_token, negative_prompt=negative_prompt)
     example["pixel_values_clip"] = CLIPImageProcessor()(images=raw_image, return_tensors="pt").pixel_values
     example["pixel_values"] = preprocess_image(raw_image, size=size, interpolation=interpolation).unsqueeze(0)
     return example
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     image_adapter.to(device)
     text_adapter.to(device)
 
-    example = preprocess_image_for_inference(args.input_image_path, tokenizer, template=args.text)
+    example = preprocess_image_for_inference(args.input_image_path, tokenizer, template=args.text, negative_prompt=args.negative_prompt)
 
     with torch.no_grad():
         generated_images = run_inference(
