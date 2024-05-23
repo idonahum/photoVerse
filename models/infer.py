@@ -1,5 +1,4 @@
 from diffusers import DPMSolverMultistepScheduler
-from utils.image_utils import denormalize
 import torch
 
 from tqdm import tqdm
@@ -8,6 +7,33 @@ from tqdm import tqdm
 def run_inference(example, tokenizer, image_encoder, text_encoder, unet, text_adapter, image_adapter, vae, scheduler,
                   device, image_encoder_layers_idx, latent_size=64, guidance_scale=1, timesteps=100, token_index=0,
                   disable_tqdm=False, seed=None, from_noised_image=False, training_mode=False):
+    """
+    Runs inference for image generation.
+
+    Args:
+        example (dict): Input example containing pixel values, text input ids, and more.
+        tokenizer: Tokenizer for text processing.
+        image_encoder: Model for encoding image features.
+        text_encoder: Model for encoding text features.
+        unet: U-Net model for image generation.
+        text_adapter: Adapter for processing text embeddings.
+        image_adapter: Adapter for processing image embeddings.
+        vae: Variational Autoencoder for encoding and decoding latent representations.
+        scheduler: Scheduler for controlling diffusion process.
+        device: Device for computation (CPU or GPU).
+        image_encoder_layers_idx (list): Indices of image encoder layers to be used.
+        latent_size (int): Size of latent space. Default is 64.
+        guidance_scale (float): Scale factor for guidance during image generation. Default is 1.
+        timesteps (int): Number of diffusion timesteps. Default is 100.
+        token_index (int): Index of the token. Default is 0.
+        disable_tqdm (bool): Whether to disable tqdm progress bar. Default is False.
+        seed (int): Random seed for reproducibility. Default is None.
+        from_noised_image (bool): Whether input image is noised. Default is False.
+        training_mode (bool): Whether in training mode. Default is False.
+
+    Returns:
+        torch.Tensor: Generated images.
+    """
 
     # Load and set the scheduler
     scheduler = DPMSolverMultistepScheduler.from_config(scheduler.config)

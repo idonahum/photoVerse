@@ -2,8 +2,7 @@ import torch.nn.functional as F
 import torch
 
 from diffusers.models.attention_processor import AttnProcessor2_0, AttnProcessor
-from models.attention_processor import PhotoVerseAttnProcessor2_0, \
-    PhotoVerseAttnProcessor
+from models.attention_processor import PhotoVerseAttnProcessor2_0, PhotoVerseAttnProcessor
 
 
 def set_visual_cross_attention_adapter(unet, num_tokens=(5,)):
