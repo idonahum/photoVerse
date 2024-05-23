@@ -36,6 +36,11 @@ Here we present high-quality generated results achieved by leveraging a single r
 
 ## Instructions
 
+### Pretrained-weights:
+We've shared our experimental models, and we recommend re-training with additional computational resources to achieve even better results.
+
+Link to our weights: [Download](https://tinyurl.com/PhotoVerse)
+
 ### 1. Docker Setup (Recommended)
 
 Make sure you have Docker installed on your system. Then, follow these steps:
