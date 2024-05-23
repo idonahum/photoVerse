@@ -38,6 +38,7 @@ for TIMESTEP in "${TIMESTEPS[@]}"; do
                               --device $DEVICE \
                               --resolution $RESOLUTION \
                               --arcface_model_root_dir $ARCFACE_MODEL_ROOT_DIR \
-                              --max_gen_images $MAX_GEN_IMAGES
+                              --max_gen_images $MAX_GEN_IMAGES \
+                              --from_noised_image
     done
 done
