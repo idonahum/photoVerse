@@ -69,7 +69,7 @@ python prepare_celebhqmasks.py --save_path='./CelebaHQMaskDataset' --gdrive_file
 
 Execute the training script using the following command:
 ```bash
-accelerate launch --config_file single_gpu.json train.py --data_root_path CelebaHQMaskDataset/train --mask_subfolder masks --output_dir photoverse_arcface_lora --max_train_steps 40000 --train_batch_size 16  --pretrained_photoverse_path weights/photoverse_final_with_lora_config.pt --report_to wandb --use_facenet_loss
+accelerate launch --config_file single_gpu.json train.py --data_root_path CelebaHQMaskDataset/train --mask_subfolder masks --output_dir photoverse_arcface_lora --max_train_steps 40000 --train_batch_size 16  --pretrained_photoverse_path weights/photoverse_final_with_lora_config.pt --report_to wandb --face_loss facenet
 ```
 
 ### 4. Inference
@@ -93,7 +93,7 @@ Further improvements by the open community are welcome. Please open an issue and
 Highly relevant contributions would include:
 1. Integrating a segmentation model into the generating pipeline for extracting face masks for the clip embedding.
 
-2. Improving the Face Loss, which is currently based on the cosine similarity of the whole picture rather than the face alone. Segmenting the face in a way that preserves gradients would be a significant improvement.
+2. Improving the Face Loss, which is currently based on the cosine similarity of the whole picture rather than the face alone. Segmenting the generated face before calculating Facenet Loss, in a way that preserves gradients would be a significant improvement.
 
 ## License
 
