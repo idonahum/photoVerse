@@ -107,6 +107,11 @@ def parse_args():
         default=None,
         help="Random seed that will be set at the beginning of training for reproducibility.",
     )
+    parser.add_argument(
+        "--from_noised_image",
+        action="store_true",
+        help="Use noised image as input"
+    )
     return parser.parse_args()
 
 def main():
@@ -161,7 +166,7 @@ def main():
                                             image_adapter, vae,
                                             scheduler, args.device, image_encoder_layers_idx,
                                             guidance_scale=args.guidance_scale,
-                                            timesteps=args.denoise_timesteps, token_index=0,seed=args.seed)
+                                            timesteps=args.denoise_timesteps, token_index=0,seed=args.seed,from_noised_image=args.from_noised_image)
                 gen_images = [to_pil(denormalize(gen_tensor)) for gen_tensor in gen_tensors]
                 input_images = [to_pil(denormalize(img)) for img in pixel_values]
                 grid_data = [("Input Images", input_images), ("Generated Images", gen_images)]
