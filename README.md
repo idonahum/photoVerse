@@ -24,20 +24,19 @@ PhotoVerse incorporates a dual-branch conditioning mechanism in both text and im
 
 ## Extension: Cosine Similarity Loss & Evaluation
 
-In addition to generating images, PhotoVerse incorporates an extension for evaluating the similarity between the generated face and the ground truth (gt) image. This evaluation utilizes cosine similarity metrics calculated with the assistance of the `facenet_pytorch` module, in addition to the `arcface` module. By leveraging face detection and feature extraction modules, our generated images tend to be more realistic and similar to the real person, strengthening the personalization capability of PhotoVerse.
+In addition to generating images, PhotoVerse incorporates an extension for evaluating the similarity between the generated face and the ground truth (gt) image. This evaluation utilizes cosine similarity metrics calculated with the assistance of the `facenet_pytorch` module, in addition to the `arcface` module. By leveraging face embedding modules, our generated images tend to be more realistic and similar to the real person, strengthening the personalization capability of PhotoVerse.
 
 
 ## Gallery
 
 Here we present high-quality generated results achieved by leveraging a single reference image and a variety of prompts.
 
-![Result 1]()
-![Result 2]()
-![Result 3]()
+![Image Grid](figs/image_grid.png)
+
 
 ## Instructions
 
-### 1. Docker Setup
+### 1. Docker Setup (Recommended)
 
 Make sure you have Docker installed on your system. Then, follow these steps:
 
@@ -45,9 +44,13 @@ Make sure you have Docker installed on your system. Then, follow these steps:
 ```bash
 docker build -t photoverse .
 ```
-#### Run the Docker container in a single command
+#### Train with Docker container in a single command
 ```bash
 ./train_container_exec.sh
+```
+#### Generate with Docker container in a single command
+```bash
+./generate_container_exec.sh
 ```
 
 ### 2. Dataset Preparation
@@ -72,6 +75,26 @@ python generate.py --model_path "runwayml/stable-diffusion-v1-5" --extra_num_tok
 ```
 Adjust the paths and parameters as necessary for your setup.
 
+## Tips
+1. Use negative prompts to prevent unwanted artifacts or features from appearing. This makes personalization more efficient.
+
+2. The attached results are based on a complete user experience without using any face mask before generating. While it's recommended to use a mask for the clip embedding to potentially enhance results, it is not essential for achieving great outcomes.
+
+3. Fine-tune the guidance scale to improve the balance between creativity and personalization.
+
+## Contributions
+Further improvements by the open community are welcome. Please open an issue and share your improvements, including your results and specifying your changes. Ensure the code is well-written and documented. We will be more than happy to review and confirm your pull request.
+
+Highly relevant contributions would include:
+1. Integrating a segmentation model into the generating pipeline for extracting face masks for the clip embedding.
+
+2. Improving the Face Loss, which is currently based on the cosine similarity of the whole picture rather than the face alone. Segmenting the face in a way that preserves gradients would be a significant improvement.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+If you use this code in your projects, we would appreciate a mention or citation of this repository.
 
 ## BibTeX
 

@@ -68,3 +68,45 @@ def save_images_grid(grid_data, img_grid_file):
         draw.text((text_x, text_y), text, font=font, fill="black")
 
     img_grid.save(img_grid_file)
+
+
+if __name__ == '__main__':
+    import os
+    # Define the prompts and their corresponding filenames
+    prompts = [
+        "Input Image",
+        "A photo of S*",
+        "S* in Ghibli anime style",
+        "S* wears a red hat",
+        "S* on the beach",
+        "Manga drawing of S*",
+        "S* as a Funko Pop figure",
+        "S* stained glass window",
+        "Watercolor painting of S*"
+    ]
+
+    # Define the base directory where the images are located
+    base_dir = "../figs"
+    grid_data = []
+
+    for prompt in prompts:
+        images = []
+        for i in range(1, 6):
+            # Construct the filename based on the prompt and index
+            file_name_map = {
+                "Input Image": f"input_image{i}.png",
+                "A photo of S*": f"photo{i}.png",
+                "S* in Ghibli anime style": f"ghibli{i}.png",
+                "S* wears a red hat": f"red_hat{i}.png",
+                "S* on the beach": f"beach{i}.png",
+                "Manga drawing of S*": f"manga{i}.png",
+                "S* as a Funko Pop figure": f"funko_pop{i}.png",
+                "S* stained glass window": f"stained_glass{i}.png",
+                "Watercolor painting of S*": f"watercolor{i}.png"
+            }
+            image_path = os.path.join(base_dir, str(i), file_name_map[prompt])
+            images.append(Image.open(image_path))
+        grid_data.append((prompt, images))
+
+    # Save the image grid
+    save_images_grid(grid_data, "image_grid.png")
